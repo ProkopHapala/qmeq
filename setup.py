@@ -73,6 +73,7 @@ def get_ext_modules():
 
 long_description = open('README.rst').read()
 
+'''
 classifiers = ['Development Status :: 5 - Production/Stable',
                'Intended Audience :: Science/Research',
                'License :: OSI Approved :: BSD License',
@@ -83,17 +84,19 @@ classifiers = ['Development Status :: 5 - Production/Stable',
                'Programming Language :: Cython',
                'Programming Language :: Python :: 3',
                'Topic :: Scientific/Engineering :: Physics']
+'''
 
-setup(name='qmeq',
-      version='1.1',
-      description=('Package for transport calculations in quantum dots ' +
-                   'using approximate quantum master equations'),
-      long_description=long_description,
-      url='http://github.com/gedaskir/qmeq',
-      author='Gediminas Kirsanskas',
-      author_email='qmeq.package@gmail.com',
-      license='BSD 2-Clause',
-      classifiers=classifiers,
+setup(
+      #name='qmeq',
+      #version='1.1',
+      #description=('Package for transport calculations in quantum dots ' +
+      #             'using approximate quantum master equations'),
+      #long_description=long_description,
+      #url='http://github.com/gedaskir/qmeq',
+      #author='Gediminas Kirsanskas',
+      #author_email='qmeq.package@gmail.com',
+      #license='BSD 2-Clause',
+      #classifiers=classifiers,
       packages=['qmeq',
                 'qmeq/approach',
                 'qmeq/approach/base',
@@ -108,6 +111,6 @@ setup(name='qmeq',
                     'qmeq/specfunc':      ['*.pyx', '*.c', '*.pyd', '*.o', '*.so'],
                     'qmeq/wrappers':      ['*.pyx', '*.c', '*.pyd', '*.o', '*.so'], },
       zip_safe=False,
-      install_requires=['numpy', 'scipy'],
+      #install_requires=['numpy', 'scipy'],
       include_dirs=[np.get_include()],
       ext_modules=get_ext_modules())

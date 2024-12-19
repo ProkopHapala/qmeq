@@ -1,6 +1,25 @@
 [project]
+name = "qmeq"
+version = "1.1.0"
 requires-python = ">=3.6"
+authors = [ {name = "Gediminas Kirsanskas", email = "qmeq.package@gmail.com"} ]
+license = {text = "BSD 2-Clause"}
+dependencies = ['numpy', 'scipy']
+description = "Package for transport calculations in quantum dots using approximate quantum master equations"
+classifiers = ['Development Status :: 5 - Production/Stable',
+               'Intended Audience :: Science/Research',
+               'License :: OSI Approved :: BSD License',
+               'Operating System :: MacOS',
+               'Operating System :: Microsoft :: Windows',
+               'Operating System :: POSIX',
+               'Operating System :: Unix',
+               'Programming Language :: Cython',
+               'Programming Language :: Python :: 3',
+               'Topic :: Scientific/Engineering :: Physics']
 
+
+[project.urls]
+Repository = "http://github.com/gedaskir/qmeq"
 
 [build-system]
 requires = [
@@ -11,3 +30,6 @@ requires = [
     "scipy"
 ]
 build-backend = "setuptools.build_meta"
+
+
+

@@ -36,8 +36,57 @@ the bias**. We still think it is important to have a package where a user can
 duplicate existing calculations, check applicability of different methods, or
 simply discover new kind of physics using different approximate master equations.
 
+Prokop Notes
+------------
+
+Activate environment (because Ubuntu 24 LTS does not allow to use pip directly):
+```
+source /home/prokop/venvs/ML/bin/activate
+```
+Compile like this ( using modified setup.py from Vlado ):
+```
+python setup.py install --root=/home/prokop/bin/
+```
+
+anyway the package is installed to :
+```
+/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/
+```
+
+you must update this path inside the script `spinless_trimer1.py`
+```
+path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
+```
+
+it does not run with cython (fallback to numpy), this is actually good for debugging
+```
+(ML) prokop@GTX3090:~/git_SW/qmeq$ python spinless_trimer1.py
+WARNING: Cannot import Cython compiled modules for the special functions (specfunc.__init__.py).
+WARNING: Cannot import Cython compiled modules for the approaches (builder_base.py).
+WARNING: Cannot import Cython compiled modules for the approaches (builder_elph.py).
+# spinless_trimer1.py start, Thu Dec 19 18:29:39 2024
+# eps1: -10.0 eps2: -10.0 eps3: -10.0 t: 0.0 U: 220.0 W: 20.0
+# GammaS: 0.2 GammaT: 0.05 VS: 0.2523 VT: 0.1262
+# muS: 0.0000 muT: 0.0000 Temp: 0.2240 DBand: 1000.0
+# VBiasMin: 0.0 VBiasMax: 60.0 dVBias: 0.100 NPoints: 600
+
+```
+
 Installation
 ------------
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 For installation instructions see [INSTALL.md](INSTALL.md).
 
