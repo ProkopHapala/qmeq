@@ -72,20 +72,45 @@ WARNING: Cannot import Cython compiled modules for the approaches (builder_elph.
 
 ```
 
+
+NOTES:
+------
+
+#### Where to start navidation the code:
+
+* when we call `qmeq.Builder()` we go to `BuilderBase.__init__()` in `/home/prokop/git_SW/qmeq/qmeq/builder/builder_base.py`
+
+
+When we run it we get following flow:
+```
+DEBUG: ===== Approach.solve()
+DEBUG: Approach.prepare_solver()
+DEBUG: ApproachPauli.generate_fct()
+DEBUG: ApproachPauli.generate_kern() ncharge: 4  statesdm: [[0], [1, 2, 4], [3, 5, 6], [7], []]
+DEBUG: ApproachPauli.generate_coupling_terms() b: 0  bp: 0  bcharge: 0
+DEBUG: ApproachPauli.generate_coupling_terms() b: 1  bp: 1  bcharge: 1
+DEBUG: ApproachPauli.generate_coupling_terms() b: 2  bp: 2  bcharge: 1
+DEBUG: ApproachPauli.generate_coupling_terms() b: 4  bp: 4  bcharge: 1
+DEBUG: ApproachPauli.generate_coupling_terms() b: 3  bp: 3  bcharge: 2
+DEBUG: ApproachPauli.generate_coupling_terms() b: 5  bp: 5  bcharge: 2
+DEBUG: ApproachPauli.generate_coupling_terms() b: 6  bp: 6  bcharge: 2
+DEBUG: ApproachPauli.generate_coupling_terms() b: 7  bp: 7  bcharge: 3
+DEBUG: ApproachPauli.generate_kern() kh.kern:
+ [[-1.318  0.     0.     0.     0.     0.     0.     0.   ]
+ [ 0.5   -0.018  0.     0.     0.4    0.4    0.     0.   ]
+ [ 0.409  0.    -0.509  0.     0.     0.     0.4    0.   ]
+ [ 0.409  0.     0.    -0.509  0.     0.     0.4    0.   ]
+ [ 0.     0.009  0.     0.5   -0.409  0.     0.     0.4  ]
+ [ 0.     0.009  0.5    0.     0.    -0.409  0.     0.4  ]
+ [ 0.     0.     0.009  0.009  0.     0.    -0.9    0.4  ]
+ [ 0.     0.     0.     0.     0.009  0.009  0.1   -1.2  ]]
+DEBUG: Approach.solve_kern()
+DEBUG: ApproachPauli.generate_current()
+```
+
+
 Installation
 ------------
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 For installation instructions see [INSTALL.md](INSTALL.md).

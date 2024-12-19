@@ -149,16 +149,20 @@ class Builder(BuilderBase):
 
     @classmethod
     def base(cls, *args, **kwargs):
+        #print('Using BuilderBase')
         return BuilderBase(*args, **kwargs)
 
     @classmethod
     def many_body(cls, *args, **kwargs):
+        #print('Using BuilderManyBody')
         return BuilderManyBody(*args, **kwargs)
 
     @classmethod
     def elph(cls, *args, **kwargs):
+        #print('Using BuilderElPh')
         return BuilderElPh(*args, **kwargs)
 
     @classmethod
     def many_body_elph(cls, *args, **kwargs):
+        #print('Using BuilderManyBodyElPh')
         return BuilderManyBodyElPh(*args, **kwargs)

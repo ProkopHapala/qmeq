@@ -37,6 +37,7 @@ class ApproachPauli(Approach):
         paulifct : array
             (Modifies) Factors used for generating Pauli master equation kernel.
         """
+        print("DEBUG: ApproachPauli.generate_fct()")
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
         ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm
@@ -64,16 +65,22 @@ class ApproachPauli(Approach):
         kern : array
             (Modifies) Kernel matrix for Pauli master equation.
         """
+        #print("DEBUG: ApproachPauli.generate_kern()")
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
+
+        print(f"DEBUG: ApproachPauli.generate_kern() ncharge: {ncharge}  statesdm: {statesdm}")
 
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:
                 if not kh.is_unique(b, b, bcharge):
                     continue
                 self.generate_coupling_terms(b, b, bcharge)
+        print("DEBUG: ApproachPauli.generate_kern() kh.kern:\n", kh.kern)
 
     def generate_coupling_terms(self, b, bp, bcharge):
+        print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge}")
+        Approach.generate_coupling_terms(self, b, bp, bcharge)
         paulifct = self.paulifct
         si, kh = self.si, self.kernel_handler
         nleads, statesdm = si.nleads, si.statesdm
@@ -98,6 +105,7 @@ class ApproachPauli(Approach):
                 fctm -= paulifct[l, cb, 0]
                 fctp += paulifct[l, cb, 1]
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
+        #print("DEBUG: ApproachPauli.generate_coupling_terms() kh.kern:\n", kh.kern)
 
     def generate_current(self):
         """
@@ -112,6 +120,7 @@ class ApproachPauli(Approach):
         heat_current : array
             (Modifies) Values of the heat current having nleads entries.
         """
+        print("DEBUG: ApproachPauli.generate_current()")
         phi0, E, paulifct, si = self.phi0, self.qd.Ea, self.paulifct, self.si
         ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm
 

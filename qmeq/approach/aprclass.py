@@ -194,6 +194,7 @@ class Approach(object):
             self.kernel_handler = KernelHandler(self.si)
 
     def prepare_solver(self):
+        print("DEBUG: Approach.prepare_solver()")
         solmethod = self.funcp.solmethod
         # Determine the proper solution method
         if self.funcp.mfreeq:
@@ -242,9 +243,13 @@ class Approach(object):
         kern : array
             (Modifies) Kernel matrix for 1vN approach.
         """
+
+        
         E = self.qd.Ea
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
+
+        print(f"DEBUG: Approach.generate_kern() ncharge: {ncharge}  statesdm: {statesdm}")
 
         for bcharge in range(ncharge):
             for b, bp in itertools.combinations_with_replacement(statesdm[bcharge], 2):
@@ -297,6 +302,9 @@ class Approach(object):
 
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
+
+        print(f"DEBUG: Approach.solve_kern()")
+
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
         norm_row = self.funcp.norm_row
@@ -376,6 +384,7 @@ class Approach(object):
         currentq : bool
             Calculate the current.
         """
+        print("DEBUG: ===== Approach.solve()")
         if qdq:
             self.qd.diagonalise()
             if rotateq:

@@ -97,6 +97,8 @@ class BuilderBase(object):
                  mtype_qd=complex, mtype_leads=complex,
                  symmetry=None, herm_hs=True, herm_c=False, m_less_n=True):
 
+        #print('BuilderBase.__init__()')
+
         self._init_copy_data(locals())
         self._init_validate_data()
         self._init_set_globals()
@@ -322,6 +324,8 @@ class BuilderManyBody(BuilderBase):
                  itype=0, dqawc_limit=10000, mfreeq=False, phi0_init=None,
                  mtype_qd=complex, mtype_leads=complex,
                  symmetry=None, herm_hs=True, herm_c=False, m_less_n=True):
+
+        #print('BuilderManyBody.__init__()') 
 
         nleads = Tba.shape[0] if Tba is not None else 0
 

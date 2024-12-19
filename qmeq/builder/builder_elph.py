@@ -83,6 +83,8 @@ class BuilderElPh(BuilderBase):
                  symmetry=None, herm_hs=True, herm_c=False, m_less_n=True,
                  bath_func=None, eps_elph=1.0e-6):
 
+        print('BuilderElPh.__init__()') 
+
         self._init_copy_data(locals())
         self._init_validate_data()
         self._init_set_globals()
@@ -167,6 +169,8 @@ class BuilderManyBodyElPh(BuilderElPh, BuilderManyBody):
                  mtype_qd=complex, mtype_leads=complex,
                  symmetry=None, herm_hs=True, herm_c=False, m_less_n=True,
                  bath_func=None, eps_elph=1.0e-6):
+
+        #print('BuilderManyBodyElPh.__init__()') 
 
         nleads = Tba.shape[0] if Tba is not None else 0
         nbaths = Vbbp.shape[0] if Vbbp is not None else 0

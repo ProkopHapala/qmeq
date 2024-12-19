@@ -44,7 +44,7 @@ VT = np.sqrt(GammaT/np.pi)
 
 VBiasMin = 0.0
 VBiasMax = 60.0
-dVBias   = 0.1
+dVBias   = 1.0
 
 
 
@@ -96,8 +96,8 @@ for k in range(NPoints):
 	kerntype = 'Pauli'
 	#kerntype = '1vN'
 	#system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype)
-	system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype,
-	                      indexing='Lin', itype=0, symq=True, solmethod='lsqr', mfreeq=0)
+	system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype, indexing='Lin', itype=0, symq=True, solmethod='lsqr', mfreeq=0)
+
 	system.solve()
 	#print(system.phi0)
 	#system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype='2vN', kpnt=2**8)
