@@ -12,6 +12,8 @@ except ImportError:
 from .wrappers.mytypes import boolnp
 from .wrappers.mytypes import longnp
 
+from .config import debug_print
+
 
 def binarylist_to_integer(lst):
     """
@@ -591,6 +593,7 @@ class StateIndexing(object):
             or given charge and sz, szlst[charge][szind],
             or given charge, sz, and, ssq, szlst[charge][szind][ssqind].
         """
+        debug_print(f"DEBUG: StateIndexing.get_lst() charge: {charge}  sz: {sz}  ssq: {ssq}")
         if charge is None and sz is None:
             return None
         elif sz is None:
@@ -718,6 +721,7 @@ class StateIndexingPauli(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
+        debug_print(f"DEBUG: StateIndexingPauli.set_statesdm() statesdm: {statesdm}")
         self.statesdm = statesdm
         self.statesdm.append([])
         self.npauli_ = 0
@@ -731,6 +735,7 @@ class StateIndexingPauli(StateIndexing):
         """
         Makes dictdm, shiftlst0 for Pauli master equation indexing.
         """
+        debug_print("DEBUG: StateIndexingPauli.set_dictdm()")
         for j1 in range(self.ncharge):
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])
             counter = 0
@@ -790,6 +795,7 @@ class StateIndexingPauli(StateIndexing):
         int
             Index of the zeroth order density matrix element.
         """
+        debug_print(f"DEBUG: StateIndexingPauli.get_ind_dm0() b: {b}  bp: {bp}  charge: {charge}")
         if maptype == 0:
             return self.dictdm[b] + self.shiftlst0[charge]
         elif maptype == 1:

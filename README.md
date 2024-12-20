@@ -83,7 +83,7 @@ NOTES:
 
 When we run it we get following flow:
 ```
-DEBUG: ===== Approach.solve()
+DEBUG: Approach.solve()
 DEBUG: Approach.prepare_solver()
 DEBUG: ApproachPauli.generate_fct()
 DEBUG: ApproachPauli.generate_kern() ncharge: 4  statesdm: [[0], [1, 2, 4], [3, 5, 6], [7], []]

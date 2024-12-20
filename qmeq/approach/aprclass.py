@@ -11,6 +11,7 @@ from ..wrappers.mytypes import complexnp
 from .kernel_handler import KernelHandler
 from .kernel_handler import KernelHandlerMatrixFree
 
+from ..config import debug_print
 
 class Approach(object):
     """
@@ -194,7 +195,7 @@ class Approach(object):
             self.kernel_handler = KernelHandler(self.si)
 
     def prepare_solver(self):
-        print("DEBUG: Approach.prepare_solver()")
+        debug_print("DEBUG: Approach.prepare_solver()")
         solmethod = self.funcp.solmethod
         # Determine the proper solution method
         if self.funcp.mfreeq:
@@ -249,7 +250,7 @@ class Approach(object):
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
 
-        print(f"DEBUG: Approach.generate_kern() ncharge: {ncharge}  statesdm: {statesdm}")
+        debug_print(f"DEBUG: Approach.generate_kern() ncharge: {ncharge}  statesdm: {statesdm}")
 
         for bcharge in range(ncharge):
             for b, bp in itertools.combinations_with_replacement(statesdm[bcharge], 2):
@@ -259,7 +260,7 @@ class Approach(object):
                 self.generate_coupling_terms(b, bp, bcharge)
 
     def generate_coupling_terms(self, b, bp, bcharge):
-        pass
+        debug_print(f"DEBUG: Approach.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge}")
 
     def generate_current(self):
         pass
@@ -303,7 +304,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        print(f"DEBUG: Approach.solve_kern()")
+        debug_print("DEBUG: Approach.solve_kern()")
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -384,7 +385,8 @@ class Approach(object):
         currentq : bool
             Calculate the current.
         """
-        print("DEBUG: ===== Approach.solve()")
+        debug_print("DEBUG: Approach.solve()")
+
         if qdq:
             self.qd.diagonalise()
             if rotateq:

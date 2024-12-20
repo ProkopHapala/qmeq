@@ -14,6 +14,8 @@ path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packag
 #path.insert(0, '/home/pokorny/bin/qmeq-1.1/')
 import qmeq
 
+
+
 print('# '+argv[0]+' start, '+ctime())
 
 NSingle = 3 ## number of impurity states
@@ -47,6 +49,13 @@ VBiasMax = 60.0
 dVBias   = 1.0
 
 
+#bDEBUG = False
+bDEBUG = True
+qmeq.config.DEBUG = bDEBUG
+
+
+
+
 
 
 
@@ -65,45 +74,46 @@ coeffE = 0.4
 coeffT = 0.3
 
 for k in range(NPoints):
-	VBias = VBias_A[k]
-	## one-particle Hamiltonian
-	H1p = {(0,0): eps1-coeffE*VBias, (0,1): t, (0,2): t,
-     	  (1,1): eps2, (1,2): t,
-     	  (2,2): eps3}
+    VBias = VBias_A[k]
+    ## one-particle Hamiltonian
+    H1p = {(0,0): eps1-coeffE*VBias, (0,1): t, (0,2): t,
+            (1,1): eps2, (1,2): t,
+            (2,2): eps3}
 
-	## two-particle Hamiltonian: inter-site coupling
-	H2p = {(0,1,1,0): W,
-	       (1,2,2,1): W,
-	       (0,2,2,0): W}
+    ## two-particle Hamiltonian: inter-site coupling
+    H2p = {(0,1,1,0): W,
+            (1,2,2,1): W,
+            (0,2,2,0): W}
 
-	## leads: substrate (S) and scanning tip (T)
-	mu_L   = {0: muS,  1: muT + VBias}
-	Temp_L = {0: Temp, 1: Temp}
+    ## leads: substrate (S) and scanning tip (T)
+    mu_L   = {0: muS,  1: muT + VBias}
+    Temp_L = {0: Temp, 1: Temp}
 
-	## coupling between leads (1st number) and impurities (2nd number)
-	TLeads = {(0,0): VS, # S <-- 1
-	          (0,1): VS, # S <-- 2
-	          (0,2): VS, # S <-- 3
-	          (1,0): VT, # T <-- 1
-	          (1,1): coeffT*VT, # T <-- 2
-	          (1,2): coeffT*VT} # T <-- 3
+    ## coupling between leads (1st number) and impurities (2nd number)
+    TLeads = {(0,0): VS, # S <-- 1
+                (0,1): VS, # S <-- 2
+                (0,2): VS, # S <-- 3
+                (1,0): VT, # T <-- 1
+                (1,1): coeffT*VT, # T <-- 2
+                (1,2): coeffT*VT} # T <-- 3
 
-	#Builder(nsingle=0, hsingle={}, coulomb={}, nleads=0, tleads={}, mulst={}, tlst={}, dband={}, 
-	#indexing=None, kpnt=None, kerntype='Pauli', symq=True, norm_row=0, solmethod=None, itype=0, 
-	#dqawc_limit=10000, mfreeq=False, phi0_init=None, mtype_qd=<class 'complex'>, mtype_leads=<class 'complex'>, 
-	#symmetry=None, herm_hs=True, herm_c=False, m_less_n=True)
+    #Builder(nsingle=0, hsingle={}, coulomb={}, nleads=0, tleads={}, mulst={}, tlst={}, dband={}, 
+    #indexing=None, kpnt=None, kerntype='Pauli', symq=True, norm_row=0, solmethod=None, itype=0, 
+    #dqawc_limit=10000, mfreeq=False, phi0_init=None, mtype_qd=<class 'complex'>, mtype_leads=<class 'complex'>, 
+    #symmetry=None, herm_hs=True, herm_c=False, m_less_n=True)
 
-	kerntype = 'Pauli'
-	#kerntype = '1vN'
-	#system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype)
-	system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype, indexing='Lin', itype=0, symq=True, solmethod='lsqr', mfreeq=0)
-
-	system.solve()
-	#print(system.phi0)
-	#system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype='2vN', kpnt=2**8)
-	#system.solve(niter=7)
-	I_A[k] = system.current[1]
-	Eigen_A[k,:] = system.Ea
+    if bDEBUG: print("====== call: system = qmeq.Builder ")
+    kerntype = 'Pauli'
+    #kerntype = '1vN'
+    #system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype)
+    system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype=kerntype, indexing='Lin', itype=0, symq=True, solmethod='lsqr', mfreeq=0)
+    if bDEBUG: print("====== call: system.solve() ")
+    system.solve()
+    #print(system.phi0)
+    #system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype='2vN', kpnt=2**8)
+    #system.solve(niter=7)
+    I_A[k] = system.current[1]
+    Eigen_A[k,:] = system.Ea
 
 ## calculate dI/dV from current
 I      = IUS(VBias_A,I_A)

@@ -9,6 +9,8 @@ from .indexing import ssqrange
 from .indexing import sz_to_ind
 from .indexing import ssq_to_ind
 
+from .config import debug_print
+
 
 def construct_ham_coulomb(qd, coulomb, statelst, ham_=None):
     """
@@ -34,6 +36,7 @@ def construct_ham_coulomb(qd, coulomb, statelst, ham_=None):
     ham_coulomb : ndarray
         Matrix representation of many-body Coulomb Hamiltonian in Fock basis for states statelst.
     """
+    debug_print(f"DEBUG: construct_ham_coulomb() statelst: {statelst}")
     si, mtype = qd.si, qd.mtype
     herm_c, m_less_n = qd.herm_c, qd.m_less_n
     nstates = len(statelst)
@@ -94,6 +97,7 @@ def construct_ham_hopping(qd, hsingle, statelst, ham_=None):
     ham_coulomb : ndarray
         Matrix representation of many-body Hamiltonian in Fock basis for states statelst.
     """
+    debug_print(f"DEBUG: construct_ham_hopping() statelst: {statelst}")
     si, mtype, herm_hs = qd.si, qd.mtype, qd.herm_hs
     nstates = len(statelst)
     if ham_ is not None:
@@ -730,6 +734,7 @@ class QuantumDot(object):
                  herm_hs=True, herm_c=False, m_less_n=True,
                  mtype=float, ham_ssq_q=False):
         """Initialization of the QuantumDot class."""
+        debug_print("DEBUG: QuantumDot.__init__()")
         self.si = si
         self.mtype = mtype
         self.ham_ssq_q = ham_ssq_q
@@ -741,6 +746,7 @@ class QuantumDot(object):
         self._init_hamiltonian()
 
     def _init_hamiltonian(self):
+        debug_print("DEBUG: QuantumDot._init_hamiltonian()")
         si = self.si
         if si.indexing == 'sz':
             self.valslst = empty_szlst(si.nsingle, True)
@@ -886,6 +892,7 @@ class QuantumDot(object):
         ssq : int
             Total spin.
         """
+        debug_print(f"DEBUG: QuantumDot.diagonalise_charge() charge: {charge}  sz: {sz}  ssq: {ssq}")
         if charge is None:
             return None
         elif sz is None:
