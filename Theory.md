@@ -41,16 +41,13 @@ $$
     
 $H_{dot}     = H_{single} + H_{coulomb}$ 
 $H_{single}  = \sum ε_i d_i⁺ d_i + \sum Ω_{ij} (d_i⁺d_j + d_j⁺d_i)$
-$H_{coulomb} = \sum U_{ij} n_in_j $
-    
-where:
-*   $ε_i$ is the on-site energy of molecule i.
-*   $d_i⁺$, d{i} are the creation and annihilation operators for an electron on molecule i.
-*   $Ω_{ij}$ is the coupling between molecules i and j.
-*   $U_{ij}$ is the Coulomb interaction between electrons on molecules i and j.
-*   $n_i = d_i⁺d_i$ is the number operator for molecule i.
+$H_{coulomb} = \sum U_{ijkl} d_i⁺d_j⁺d_kd_l$
 
-In QmeQ, `hsingle` (dictionary) stores ε{i} and Ω{ij}, and `coulomb` (dictionary) stores U{ij}.
+The Hamiltonian is constructed in two steps (see `qmeq/qdot.py`):
+1. `construct_ham_hopping()`: Builds $H_{single}$ in the Fock basis
+2. `construct_ham_coulomb()`: Adds the Coulomb interaction terms
+
+The eigenstates |i⟩ are then found by diagonalizing H_{dot}.
 
 ### Leads Hamiltonian $H_{leads}$ :
     
@@ -61,13 +58,14 @@ where:
 
 ###   Tunneling Hamiltonian $H_{tunneling}$ :
     
-$H_{tunneling} = \sum { t_{αi} d_{i}⁺ c_{kα} + H.c. } $
+$H_{tunneling} = \sum_{kα,i} (t_{kα,i} c_{kα}⁺d_i + t_{kα,i}^* d_i⁺c_{kα})$
 
 where:
-*   $t_{αi}$ is the tunneling amplitude between molecule i and lead α.
-*   H.c. denotes the Hermitian conjugate.
+*   $c_{kα}⁺$ ($c_{kα}$) creates (annihilates) an electron in lead α with momentum k
+*   $d_i⁺$ ($d_i$) creates (annihilates) an electron in dot state i
+*   $t_{kα,i}$ is the tunneling amplitude
 
-In QmeQ, `tleads` (dictionary) stores $t_{αi}$.
+The tunneling amplitudes are transformed from single-particle to many-body basis using `rotate_Tba()` in `qmeq/leadstun.py`.
 
 ## Step 2: Calculate Transition Rates $W_{ji}$
 
@@ -76,36 +74,32 @@ The transition rates $W_{ji}$ are calculated using Fermi's Golden Rule:
 $ W_{ji} = (2π/ħ) |⟨i|H_{tunneling}|j⟩|^2 ρ(E_i) f(E_i - E_j - μ) $
 
 where:
-
-*   $|i⟩$ and $|j⟩$ are the final and initial many-body states, respectively
-*   $ρ(E_i)$ is the density of states in the lead at the final state energy (assumed constant in wide-band limit)
-*   $f(x)$ is the Fermi-Dirac distribution function: $f(x) = 1/(\exp(x) + 1)$
-    *   $E_i - E_j$ is the energy difference between final and initial states
-    *   $μ$ is the chemical potential of the lead
-    *   $T$ is the temperature
-    *   For electron removal processes, we use $1-f(E_i - E_j - μ)$
+*   $|i⟩$ and $|j⟩$ are the final and initial many-body states
+*   $ρ(E_i)$ is absorbed into the tunneling amplitudes (wide-band limit)
+*   $f(x)$ is the Fermi-Dirac distribution: $f(x) = 1/(exp(x) + 1)$
+*   $E_i - E_j$ is the energy difference between final and initial states
+*   $μ$ is the chemical potential of the lead
 
 ### Implementation Details:
 
-The transition rates are calculated in several steps (see `qmeq/approach/base/pauli.py`):
+The rates are calculated in several steps:
 
-1. **Matrix Elements** (`generate_fct` method):
+1. **Matrix Elements** (in `generate_fct`):
 ```python
-# Calculate |⟨i|H_tunneling|j⟩|^2
+# Calculate |⟨i|H_tunneling|j⟩|^2 in many-body basis
 xcb = (Tba[l, b, c]*Tba[l, c, b]).real
 ```
 
-2. **Energy Conservation** (`func_pauli` in `qmeq/specfunc/specfunc.py`):
+2. **Energy Conservation** (in `func_pauli`):
 ```python
-# Normalized energy difference
+# Normalized energy for numerical stability
 alpha = (Ecb-mu)/T  # Ecb = E_c-E_b
 # Fermi factors for addition/removal
 cur0 = fermi_func(alpha)      # f((E_c-E_b-μ)/T)
 cur1 = 1-cur0                 # 1-f((E_c-E_b-μ)/T)
-rez = 2*pi*np.array([cur0, cur1])
 ```
 
-3. **Assembly of Rates** (`generate_coupling_terms` method):
+3. **Assembly of Rates** (in `generate_coupling_terms`):
 ```python
 # Combine matrix elements and Fermi factors
 fctm -= paulifct[l, ba, 1]  # Electron removal
@@ -114,57 +108,23 @@ fctp += paulifct[l, ba, 0]  # Electron addition
 
 ### Important Notes:
 
-1. **Wide-band Limit:** The code assumes a constant density of states ρ(E) in the leads.
-2. **Energy Conservation:** The energy difference E_i - E_j is properly accounted for relative to the lead's chemical potential μ.
+1. **Wide-band Limit:** The density of states ρ(E) is absorbed into tunneling amplitudes
+2. **Energy Conservation:** Energy differences are properly accounted for in many-body basis
 3. **Fermi Statistics:** 
-   - For electron addition (|j⟩ → |i⟩ where N_i = N_j + 1): Uses f(E_i-E_j-μ)
-   - For electron removal (|j⟩ → |i⟩ where N_i = N_j - 1): Uses 1-f(E_i-E_j-μ)
-
-### Code Structure:
-
-The implementation is spread across several files:
-- `qmeq/approach/base/pauli.py`: Main PME implementation
-  - `ApproachPauli.generate_fct()`: Calculates matrix elements
-  - `ApproachPauli.generate_kern()`: Builds the kernel matrix
-  - `ApproachPauli.generate_coupling_terms()`: Assembles transition rates
-
-- `qmeq/specfunc/specfunc.py`: Special functions
-  - `func_pauli()`: Calculates Fermi function factors
-  - `fermi_func()`: Implements the Fermi-Dirac distribution
-
-- `qmeq/indexing.py`: State indexing
-  - `StateIndexingPauli`: Manages state indices for PME calculations
-
-The transition rates are stored in the `system.kern` matrix, where each element (i,j) represents the rate $W_{ji}$ from state |j⟩ to state |i⟩.
+   - Addition (N_i = N_j + 1): Uses f(E_i-E_j-μ)
+   - Removal (N_i = N_j - 1): Uses 1-f(E_i-E_j-μ)
 
 ## Step 3: Construct the PME Matrix
 
-For our three-molecule system with one electron per molecule, we have four relevant basis states:
+The Pauli master equation describes the time evolution of the probabilities P_i:
 
- * $|000⟩$ - all molecules unoccupied - state 0
- * $|100⟩$ - molecule 1 occupied - state 1
- * $|010⟩$ - molecule 2 occupied - state 2
- * $|001⟩$ - molecule 3 occupied - state 3
- * $|110⟩$ - molecules 1 and 2 occupied - state 4
- * $|101⟩$ - molecules 1 and 3 occupied - state 5
- * $|011⟩$ - molecules 2 and 3 occupied - state 6
- * $|111⟩$ - all molecules occupied - state 7
+$\frac{dP_i}{dt} = \sum_j (W_{ij}P_j - W_{ji}P_i)$
 
-The PME matrix will be an 8x8 matrix. Each element (i, j) of the matrix represents the transition rate from state $|j⟩$ to state $|i⟩$.
+The kernel matrix L is constructed in `generate_kern()` where:
+- Diagonal terms: $L_{ii} = -\sum_j W_{ji}$ (total out-rate)
+- Off-diagonal terms: $L_{ij} = W_{ij}$ (transition rate in)
 
-
-### Example: Calculating Matrix Elements
-
-Let's consider a few examples of how to calculate the matrix elements:
-
-*   **$W_{10}$ (Transition from $|000⟩$ to $|100⟩$):** This corresponds to an electron tunneling from the substrate or tip to molecule 1. The rate will depend on the tunneling amplitude t{α1}, the density of states in the lead, and the Fermi-Dirac function.
-*   **$W_{01}$ (Transition from $|100⟩$ to $|000⟩$):** This corresponds to an electron tunneling from molecule 1 to the substrate or tip.
-*   **$W_{21}$ (Transition from $|100⟩$ to $|010⟩$):** This corresponds to an electron hopping from molecule 1 to molecule 2. This rate will depend on the coupling strength Ω{12} between the molecules.
-
-### Important Considerations for the Triangular System:
-
-*   **Symmetry:** The symmetry of your system will affect the transition rates. For example, if molecules 1 and 2 are symmetrically coupled to the tip, then W{10} (substrate to molecule 1) might be different from W{30} (substrate to molecule 3) if molecule 3 is further away.
-*   **"Dark State":** The formation of a "dark state" (or a state with similar properties) is crucial for observing NDR. This state will have a very weak coupling to the tip, effectively blocking transport. You'll need to carefully choose the parameters (on-site energies, inter-molecular couplings, and tunneling amplitudes) to create such a state.
+This ensures probability conservation: $\sum_i \frac{dP_i}{dt} = 0$
 
 ## Step 4: Solve the PME
 
@@ -249,11 +209,6 @@ where:
 *   $W_{ji}^α$ is the transition rate from state $|j⟩$ to state $|i⟩$ involving an electron tunneling from/to lead $α$.
 
 In QmeQ, the current is calculated and stored in `system.current`.
-
-
-
-
-
 
 # Code Snippets (Illustrative)
 
