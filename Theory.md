@@ -1,4 +1,3 @@
-
 # Formulating the Pauli Master Equation for a Triangular Molecular System
 
 This document provides a "cookbook" guide to formulating the Pauli Master Equation (PME) for a system of three molecules arranged in a triangle, coupled to a substrate (lead 1) and an STM tip (lead 2). It's designed to help you implement your own PME solver in C/C++ or Julia, based on the concepts used in the QmeQ package.
@@ -38,7 +37,7 @@ $$
 H = H_{dot} + H_{leads} + H_{tunneling}
 $$
 
-###  (Quantum Dot Hamiltonian) $H_{dot}$:
+### Quantum Dot Hamiltonian $H_{dot}$:
     
 $H_{dot}     = H_{single} + H_{coulomb}$ 
 $H_{single}  = \sum ε_i d_i⁺ d_i + \sum Ω_{ij} (d_i⁺d_j + d_j⁺d_i)$
@@ -74,31 +73,69 @@ In QmeQ, `tleads` (dictionary) stores $t_{αi}$.
 
 The transition rates $W_{ji}$ are calculated using Fermi's Golden Rule:
 
-$ W_{ji} = (2π/ħ) |⟨i|H_{tunneling}|j⟩|^2 ρ(E_i) f(E_j - E_i) $
+$ W_{ji} = (2π/ħ) |⟨i|H_{tunneling}|j⟩|^2 ρ(E_i) f(E_i - E_j - μ) $
 
 where:
 
-*   $|i⟩$ and $|j⟩$ are the final and initial many-body states, respectively.
-*   $ρ(E_i)$ is the density of states in the lead at the final state energy.
-*   $f(E)$ is the Fermi-Dirac distribution function: $f(E) = 1 / (\exp((E - μ)/kT) + 1)$.
-    *   μ is the chemical potential of the lead.
-    *   k is the Boltzmann constant.
-    *   T is the temperature.
+*   $|i⟩$ and $|j⟩$ are the final and initial many-body states, respectively
+*   $ρ(E_i)$ is the density of states in the lead at the final state energy (assumed constant in wide-band limit)
+*   $f(x)$ is the Fermi-Dirac distribution function: $f(x) = 1/(\exp(x) + 1)$
+    *   $E_i - E_j$ is the energy difference between final and initial states
+    *   $μ$ is the chemical potential of the lead
+    *   $T$ is the temperature
+    *   For electron removal processes, we use $1-f(E_i - E_j - μ)$
 
-### Simplifications for PME:
+### Implementation Details:
 
-1. **Wide-band limit:** Assume a constant density of states ρ(E) in the leads.
-2. **Neglect coherences:** In the PME, we neglect coherences between different many-body states, meaning we only consider the diagonal elements of the density matrix (the probabilities).
+The transition rates are calculated in several steps (see `qmeq/approach/base/pauli.py`):
 
-### Transition Rate Calculation in QmeQ:
+1. **Matrix Elements** (`generate_fct` method):
+```python
+# Calculate |⟨i|H_tunneling|j⟩|^2
+xcb = (Tba[l, b, c]*Tba[l, c, b]).real
+```
 
-QmeQ calculates the transition rates by first expressing H{tunneling} in the many-body eigenbasis of H{dot}:
+2. **Energy Conservation** (`func_pauli` in `qmeq/specfunc/specfunc.py`):
+```python
+# Normalized energy difference
+alpha = (Ecb-mu)/T  # Ecb = E_c-E_b
+# Fermi factors for addition/removal
+cur0 = fermi_func(alpha)      # f((E_c-E_b-μ)/T)
+cur1 = 1-cur0                 # 1-f((E_c-E_b-μ)/T)
+rez = 2*pi*np.array([cur0, cur1])
+```
 
-$H_{tunneling} = \sum T_{ba,kα}|b⟩⟨a|c_{kα} + H.c.$
+3. **Assembly of Rates** (`generate_coupling_terms` method):
+```python
+# Combine matrix elements and Fermi factors
+fctm -= paulifct[l, ba, 1]  # Electron removal
+fctp += paulifct[l, ba, 0]  # Electron addition
+```
 
-where |a⟩ and |b⟩ are many-body eigenstates of H{dot}, and T{ba,kα} are the many-body tunneling amplitudes.
+### Important Notes:
 
-Then, the transition rates are calculated using a modified Fermi's Golden Rule, taking into account the different possible transitions between many-body states and the Fermi-Dirac distribution in the leads. The rates are stored in the `system.kern` matrix in QmeQ.
+1. **Wide-band Limit:** The code assumes a constant density of states ρ(E) in the leads.
+2. **Energy Conservation:** The energy difference E_i - E_j is properly accounted for relative to the lead's chemical potential μ.
+3. **Fermi Statistics:** 
+   - For electron addition (|j⟩ → |i⟩ where N_i = N_j + 1): Uses f(E_i-E_j-μ)
+   - For electron removal (|j⟩ → |i⟩ where N_i = N_j - 1): Uses 1-f(E_i-E_j-μ)
+
+### Code Structure:
+
+The implementation is spread across several files:
+- `qmeq/approach/base/pauli.py`: Main PME implementation
+  - `ApproachPauli.generate_fct()`: Calculates matrix elements
+  - `ApproachPauli.generate_kern()`: Builds the kernel matrix
+  - `ApproachPauli.generate_coupling_terms()`: Assembles transition rates
+
+- `qmeq/specfunc/specfunc.py`: Special functions
+  - `func_pauli()`: Calculates Fermi function factors
+  - `fermi_func()`: Implements the Fermi-Dirac distribution
+
+- `qmeq/indexing.py`: State indexing
+  - `StateIndexingPauli`: Manages state indices for PME calculations
+
+The transition rates are stored in the `system.kern` matrix, where each element (i,j) represents the rate $W_{ji}$ from state |j⟩ to state |i⟩.
 
 ## Step 3: Construct the PME Matrix
 
@@ -272,4 +309,3 @@ tleads = {(0, 0): t_substrate1, (1, 0): t_tip1,
 *   The calculation of the transition rates `Wji` is the most crucial and complex part of the implementation. You'll need to carefully consider the energy differences between the states, the Fermi-Dirac distribution, and the tunneling amplitudes.
 *   The specific form of the PME matrix and the current calculation will depend on the details of your system and the approximations you make.
 *   Pay close attention to the indexing of states and leads in your implementation.
-
