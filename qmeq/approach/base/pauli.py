@@ -17,6 +17,19 @@ class ApproachPauli(Approach):
 
     kerntype = 'pyPauli'
 
+    def __init__(self, qd):
+        """
+        Initialization of the Pauli approach.
+
+        Parameters
+        ----------
+        qd : QuantumDot
+            Quantum dot system.
+        """
+        Approach.__init__(self, qd)
+        self.paulifct = np.zeros((self.si.nleads, self.si.ndm1, 2), dtype=float)
+        self.verbosity = 0  # Add verbosity control
+
     def get_kern_size(self):
         return self.si.npauli
 
@@ -32,13 +45,10 @@ class ApproachPauli(Approach):
     def generate_fct(self):
         """
         Make factors used for generating Pauli master equation kernel.
-
-        Parameters
-        ----------
-        paulifct : array
-            (Modifies) Factors used for generating Pauli master equation kernel.
         """
-        debug_print("DEBUG: ApproachPauli.generate_fct()")
+        if self.verbosity > 0:
+            print("\nDEBUG: generate_fct() Calculating Pauli factors...")
+            
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
         ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm
@@ -54,8 +64,11 @@ class ApproachPauli(Approach):
                 for l in range(nleads):
                     xcb = (Tba[l, b, c]*Tba[l, c, b]).real
                     rez = func_pauli(Ecb, mulst[l], tlst[l], dlst[l, 0], dlst[l, 1], itype)
-                    paulifct[l, cb, 0] = xcb*rez[0]
-                    paulifct[l, cb, 1] = xcb*rez[1]
+                    paulifct[l, cb, 0] = xcb*rez[0]  # Forward
+                    paulifct[l, cb, 1] = xcb*rez[1]  # Backward
+                    if self.verbosity > 0:
+                        print(f"DEBUG: generate_fct() l:{l} i:{c} j:{b} E_diff:{Ecb:.6f} coupling:{xcb:.6f} "
+                              f"fermi:{rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
 
     def generate_kern(self):
         """
@@ -66,18 +79,31 @@ class ApproachPauli(Approach):
         kern : array
             (Modifies) Kernel matrix for Pauli master equation.
         """
+        if self.verbosity > 0:
+            print("\nDEBUG: generate_kern() Building kernel matrix...")
+            
         debug_print("DEBUG: ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(self.si.ncharge, self.si.statesdm))
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
 
+        self.generate_fct()
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:
                 if not kh.is_unique(b, b, bcharge):
                     continue
                 self.generate_coupling_terms(b, b, bcharge)
         debug_print("DEBUG: ApproachPauli.generate_kern() kh.kern:\n", kh.kern)
+        if self.verbosity > 0:
+            print("DEBUG: generate_kern() Kernel matrix:")
+            kernel = self.kernel_handler.get_kernel()
+            for row in kernel:
+                print(" ".join(f"{x:10.6f}" for x in row))
 
     def generate_coupling_terms(self, b, bp, bcharge):
+        """Generate coupling terms for the Pauli master equation."""
+        if self.verbosity > 0:
+            print(f"\nDEBUG: generate_coupling_terms() state:{b}")
+            
         debug_print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge}")
         Approach.generate_coupling_terms(self, b, bp, bcharge)
         paulifct = self.paulifct
@@ -88,23 +114,33 @@ class ApproachPauli(Approach):
         ccharge = bcharge+1
 
         bb = si.get_ind_dm0(b, b, bcharge)
+        
+        # Handle transitions from lower charge states
         for a in statesdm[acharge]:
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
             fctm, fctp = 0, 0
             for l in range(nleads):
-                fctm -= paulifct[l, ba, 1]
-                fctp += paulifct[l, ba, 0]
+                fctm -= paulifct[l, ba, 1]  # Electron leaving
+                fctp += paulifct[l, ba, 0]  # Electron entering
             kh.set_matrix_element_pauli(fctm, fctp, bb, aa)
+            if self.verbosity > 0:
+                print(f"DEBUG: generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
+        
+        # Handle transitions to higher charge states
         for c in statesdm[ccharge]:
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
             fctm, fctp = 0, 0
             for l in range(nleads):
-                fctm -= paulifct[l, cb, 0]
-                fctp += paulifct[l, cb, 1]
+                fctm -= paulifct[l, cb, 0]  # Electron entering
+                fctp += paulifct[l, cb, 1]  # Electron leaving
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
-        #print("DEBUG: ApproachPauli.generate_coupling_terms() kh.kern:\n", kh.kern)
+            if self.verbosity > 0:
+                print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
+        
+        if self.verbosity > 0:
+            print(f"DEBUG: generate_coupling_terms() state:{b} diagonal:{kh.get_matrix_element(bb, bb):.6f}")
 
     def generate_current(self):
         """
@@ -119,6 +155,9 @@ class ApproachPauli(Approach):
         heat_current : array
             (Modifies) Values of the heat current having nleads entries.
         """
+        if self.verbosity > 0:
+            print("\nDEBUG: generate_current() Calculating currents...")
+            
         debug_print("DEBUG: ApproachPauli.generate_current()")
         phi0, E, paulifct, si = self.phi0, self.qd.Ea, self.paulifct, self.si
         ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm
