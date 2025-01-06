@@ -4,11 +4,12 @@
 #include <cmath>
 #include <cstring>
 #include <cassert>
+#include "gauss_solver.hpp"
 
-// Constants
+// Constants should be defined in meV units
 const double PI = 3.14159265358979323846;
-const double HBAR = 1.0545718e-34;  // Reduced Planck constant
-const double KB = 1.380649e-23;     // Boltzmann constant
+const double HBAR = 0.6582119;  // Reduced Planck constant in meV*ps
+const double KB = 0.08617333;   // Boltzmann constant in meV/K
 
 // Structure to hold lead parameters
 struct LeadParams {
@@ -35,8 +36,8 @@ inline double fermi_func(double energy, double mu, double temp) {
 class PauliSolver {
 private:
     SystemParams params;
-    double* kernel;     // Kernel matrix L [nstates x nstates]
-    double* rhs;        // Right-hand side vector b [nstates]
+    double* kernel;        // Kernel matrix L [nstates x nstates]
+    double* rhs;           // Right-hand side vector b [nstates]
     double* probabilities; // State probabilities p [nstates]
 
     // Calculate transition rate W_ji from state j to i
@@ -51,7 +52,10 @@ private:
         double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
         
         // Rate according to Fermi's golden rule
-        return (2.0 * PI / HBAR) * coupling * lead.gamma * fermi;
+        // Note: QmeQ uses Γ = 2π|t|²ρ, where ρ=1/2π in wide-band limit
+        // So our coupling already includes the 2π factor
+        // Note: QmeQ multiplies by 2π in func_pauli
+        return coupling * lead.gamma * fermi * (2.0 * PI) / HBAR;
     }
 
     // Build the kernel matrix L and right-hand side vector b
@@ -91,57 +95,17 @@ private:
     // Solve the system Lp = b using Gaussian elimination with partial pivoting
     void solve_system() {
         const int n = params.nstates;
-        double* aug_matrix = new double[n * (n + 1)];  // Augmented matrix [L|b]
-        
-        // Create augmented matrix
-        for(int i = 0; i < n; i++) {
-            for(int j = 0; j < n; j++) {
-                aug_matrix[i * (n + 1) + j] = kernel[i * n + j];
-            }
-            aug_matrix[i * (n + 1) + n] = rhs[i];
+        GaussSolver::solve(kernel, rhs, probabilities, n);
+    }
+
+    // Count number of electrons in a state
+    int count_electrons(int state) {
+        int count = 0;
+        while(state) {
+            count += state & 1;
+            state >>= 1;
         }
-
-        // Gaussian elimination with partial pivoting
-        for(int k = 0; k < n - 1; k++) {
-            // Find pivot
-            int pivot_row = k;
-            double pivot_val = fabs(aug_matrix[k * (n + 1) + k]);
-            for(int i = k + 1; i < n; i++) {
-                double val = fabs(aug_matrix[i * (n + 1) + k]);
-                if(val > pivot_val) {
-                    pivot_val = val;
-                    pivot_row = i;
-                }
-            }
-
-            // Swap rows if necessary
-            if(pivot_row != k) {
-                for(int j = k; j <= n; j++) {
-                    double temp = aug_matrix[k * (n + 1) + j];
-                    aug_matrix[k * (n + 1) + j] = aug_matrix[pivot_row * (n + 1) + j];
-                    aug_matrix[pivot_row * (n + 1) + j] = temp;
-                }
-            }
-
-            // Eliminate column
-            for(int i = k + 1; i < n; i++) {
-                double factor = aug_matrix[i * (n + 1) + k] / aug_matrix[k * (n + 1) + k];
-                for(int j = k; j <= n; j++) {
-                    aug_matrix[i * (n + 1) + j] -= factor * aug_matrix[k * (n + 1) + j];
-                }
-            }
-        }
-
-        // Back substitution
-        for(int i = n - 1; i >= 0; i--) {
-            probabilities[i] = aug_matrix[i * (n + 1) + n];
-            for(int j = i + 1; j < n; j++) {
-                probabilities[i] -= aug_matrix[i * (n + 1) + j] * probabilities[j];
-            }
-            probabilities[i] /= aug_matrix[i * (n + 1) + i];
-        }
-
-        delete[] aug_matrix;
+        return count;
     }
 
 public:
@@ -158,29 +122,41 @@ public:
         delete[] probabilities;
     }
 
-    // Solve the Pauli master equation and return state probabilities
-    const double* solve() {
+    // Solve the Pauli master equation
+    void solve() {
         build_system();
         solve_system();
-        return probabilities;
     }
+
+    // Getter methods
+    const double* get_kernel() const { return kernel; }
+    const double* get_probabilities() const { return probabilities; }
+    int get_nstates() const { return params.nstates; }
 
     // Calculate current through a specific lead
     double calculate_current(int lead_idx) {
-        double current = 0.0;
         const int n = params.nstates;
+        double current = 0.0;
         
+        // For each pair of states
         for(int i = 0; i < n; i++) {
             for(int j = 0; j < n; j++) {
-                if(i == j) continue;
-                // Current = e * Σ_ij (W_ji^(l) p_j - W_ij^(l) p_i)
-                double rate_ji = calculate_rate(i, j, lead_idx);
-                double rate_ij = calculate_rate(j, i, lead_idx);
-                current += rate_ji * probabilities[j] - rate_ij * probabilities[i];
+                // Get tunneling amplitude and rate
+                double tunneling = params.tunneling_amplitudes[lead_idx * n * n + j * n + i];
+                if(tunneling == 0.0) continue;  // Skip if no tunneling
+                
+                // Calculate current contribution
+                // Note: QmeQ uses I = e ∑_ij W_ij p_j where W_ij is the rate from j to i
+                // The sign is determined by whether i has more electrons than j
+                int i_elec = count_electrons(i);
+                int j_elec = count_electrons(j);
+                if(i_elec == j_elec) continue;  // Skip if same number of electrons
+                
+                double rate = calculate_rate(i, j, lead_idx);
+                current += rate * probabilities[j] * (i_elec > j_elec ? 1.0 : -1.0);
             }
         }
-        
-        return current;  // in units of electron charge
+        return current;
     }
 };
 

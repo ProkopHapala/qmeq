@@ -245,7 +245,6 @@ class Approach(object):
             (Modifies) Kernel matrix for 1vN approach.
         """
 
-        
         E = self.qd.Ea
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
@@ -259,8 +258,11 @@ class Approach(object):
                 kh.set_energy(E[b]-E[bp], b, bp, bcharge)
                 self.generate_coupling_terms(b, bp, bcharge)
 
+        debug_print("DEBUG: Approach.generate_kern() DONE: kh.kern:\n", kh.kern)
+
     def generate_coupling_terms(self, b, bp, bcharge):
-        debug_print(f"DEBUG: Approach.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge}")
+        #debug_print(f"DEBUG: Approach.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge}")
+        pass
 
     def generate_current(self):
         pass
@@ -282,6 +284,8 @@ class Approach(object):
             Values of zeroth order density matrix elements
             after acting with Liouvillian, i.e., dphi0_dt=L(phi0p).
         """
+
+        debug_print("DEBUG: Approach.generate_vec()")
         norm_row = self.funcp.norm_row
 
         kh = self.kernel_handler
@@ -323,6 +327,9 @@ class Approach(object):
             kern[-1] = self.norm_vec
             bvec[-1] = 1
 
+        print("DEBUG: Approach.solve_kern() kern:\n", kern)
+        print("DEBUG: Approach.solve_kern() bvec:\n", bvec)
+
         # Try to solve the master equation
         try:
             if solmethod == 'solve':
@@ -332,6 +339,11 @@ class Approach(object):
 
             self.phi0[:] = self.sol0[0]
             self.success = True
+
+            print("DEBUG: Approach.solve_kern() sol0:\n", self.sol0)
+            print("DEBUG: Approach.solve_kern() phi0:\n", self.phi0)
+
+
         except Exception as exept:
             self.funcp.print_error(exept)
             self.phi0.fill(0.0)
