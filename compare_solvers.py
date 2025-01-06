@@ -5,25 +5,29 @@ from sys import path
 path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
 import qmeq
 
+# setup numpy print options to infinite line length
+np.set_printoptions(linewidth=256, suppress=True)
+#np.set_printoptions(linewidth=256, suppress=False)
+
 from pauli_solver_lib import PauliSolver, calculate_state_energy, calculate_tunneling_amplitudes
 
 def run_solvers( bRunQmeq=True, bRunCpp=True ):
 
     # System parameters
     NSingle = 3  # number of impurity states
-    NLeads = 2   # number of leads
+    NLeads  = 2   # number of leads
 
     # Parameters (in meV)
     eps1 = eps2 = eps3 = -10.0
-    t = 0.0      # direct hopping
-    W = 20.0     # inter-site coupling
+    t     = 0.0      # direct hopping
+    W     = 20.0     # inter-site coupling
     VBias = 0.0  # bias voltage
 
     # Lead parameters
-    muS = 0.0    # substrate chemical potential
-    muT = 0.0    # tip chemical potential
-    Temp = 0.224 # temperature in meV
-    DBand = 1000.0 # lead bandwidth
+    muS    = 0.0    # substrate chemical potential
+    muT    = 0.0    # tip chemical potential
+    Temp   = 0.224 # temperature in meV
+    DBand  = 1000.0 # lead bandwidth
     GammaS = 0.20 # coupling to substrate
     GammaT = 0.05 # coupling to tip
 
@@ -36,14 +40,14 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
     coeffT = 0.3
     
     # One-particle Hamiltonian
-    H1p = {(0,0): eps1-coeffE*VBias, (0,1): t, (0,2): t,
-           (1,1): eps2, (1,2): t,
-           (2,2): eps3}
+    hsingle = {(0,0): eps1-coeffE*VBias, (0,1): t, (0,2): t,
+               (1,1): eps2, (1,2): t,
+               (2,2): eps3}
     
     # Two-particle Hamiltonian: inter-site coupling
-    H2p = {(0,1,1,0): W,
-           (1,2,2,1): W,
-           (0,2,2,0): W}
+    coulomb = {(0,1,1,0): W,
+               (1,2,2,1): W,
+               (0,2,2,0): W}
     
     # Leads: substrate (S) and scanning tip (T)
     mu_L   = {0: muS, 1: muT + VBias}
@@ -56,10 +60,13 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
               (1,0): VT,         # T <-- 1
               (1,1): coeffT*VT,  # T <-- 2
               (1,2): coeffT*VT}  # T <-- 3
+
+
+    verbosity = 1
     
     # Run QmeQ solver
     if bRunQmeq:
-        system = qmeq.Builder(NSingle, H1p, H2p, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
+        system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
         system.solve()
         qmeq_res = {
             'current': system.current[1],
@@ -67,21 +74,26 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
             'probabilities': system.phi0,
             'kernel': system.kern,
         }
-    
+        print("\nQmeQ hsingle:", hsingle)
+        print("QmeQ coulomb:", coulomb)
+        print("QmeQ states:", [bin(i)[2:].zfill(NSingle) for i in range(2**NSingle)])
+        print("QmeQ energies:", system.Ea)
+
     # Run C++ solver
     if bRunCpp:
         NStates = 2**NSingle
-        energies = np.array([ calculate_state_energy(i, NSingle, eps1, eps2, eps3, W) for i in range(NStates)])
+        energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) 
+                            for i in range(NStates)])
         tunneling_amplitudes = calculate_tunneling_amplitudes(  NLeads, NStates, NSingle, VS, VT, coeffT )
-        lead_mu = np.array([muS, muT + VBias])
-        lead_temp = np.array([Temp, Temp])
-        lead_gamma = np.array([GammaS, GammaT])
-        pauli = PauliSolver()
-        solver = pauli.create_solver(   NStates, NLeads, energies, tunneling_amplitudes,  lead_mu, lead_temp, lead_gamma)
+        lead_mu              = np.array([muS, muT + VBias])
+        lead_temp            = np.array([Temp, Temp])
+        lead_gamma           = np.array([GammaS, GammaT])
+        pauli                = PauliSolver()
+        solver               = pauli.create_solver(   NStates, NLeads, energies, tunneling_amplitudes,  lead_mu, lead_temp, lead_gamma, verbosity)
         pauli.solve(solver)
-        kernel = pauli.get_kernel(solver, NStates)
-        probabilities = pauli.get_probabilities(solver, NStates)
-        currents = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
+        kernel               = pauli.get_kernel(solver, NStates)
+        probabilities        = pauli.get_probabilities(solver, NStates)
+        currents             = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
         pauli.cleanup(solver)
         
         cpp_res = {
@@ -90,13 +102,15 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
             'probabilities': probabilities,
             'kernel': kernel,
         }
+        print("\nC++ states:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
+        print("C++ energies:", energies)
     
     return qmeq_res, cpp_res
 
 def compare_results(qmeq_res, cpp_res, tol=1e-8):
     """Compare results from both solvers"""
-    print("Comparing QmeQ vs C++ results:")
-    
+    print("\n\n#### Comparing QmeQ vs C++ results:")
+
     diff = np.max(np.abs(qmeq_res['energies'] - cpp_res['energies']))
     if diff > tol:
         print("Energies:   diff:", diff)

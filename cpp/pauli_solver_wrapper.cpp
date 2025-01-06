@@ -6,7 +6,7 @@ extern "C" {
 // Create a solver instance
 void* create_pauli_solver(int nstates, int nleads, 
                          double* energies, double* tunneling_amplitudes,
-                         double* lead_mu, double* lead_temp, double* lead_gamma) {
+                         double* lead_mu, double* lead_temp, double* lead_gamma,int verbosity = 0) {
     SystemParams params;
     params.nstates = nstates;
     params.nleads = nleads;
@@ -17,8 +17,7 @@ void* create_pauli_solver(int nstates, int nleads,
     
     // Allocate and copy tunneling amplitudes
     params.tunneling_amplitudes = new double[nleads * nstates * nstates];
-    std::memcpy(params.tunneling_amplitudes, tunneling_amplitudes, 
-                nleads * nstates * nstates * sizeof(double));
+    std::memcpy(params.tunneling_amplitudes, tunneling_amplitudes, nleads * nstates * nstates * sizeof(double));
     
     // Allocate and set up leads
     params.leads = new LeadParams[nleads];
@@ -28,7 +27,7 @@ void* create_pauli_solver(int nstates, int nleads,
         params.leads[i].gamma = lead_gamma[i];
     }
     
-    return new PauliSolver(params);
+    return new PauliSolver(params, verbosity );
 }
 
 // Solve the master equation
@@ -56,7 +55,7 @@ void get_probabilities(void* solver_ptr, double* out_probs) {
 // Calculate current through a lead
 double calculate_current(void* solver_ptr, int lead_idx) {
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
-    return solver->calculate_current(lead_idx);
+    return solver->generate_current(lead_idx);
 }
 
 // Cleanup

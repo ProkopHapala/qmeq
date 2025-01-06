@@ -37,8 +37,7 @@ class ApproachPauli(ApproachElPh):
         si, kh = self.si_elph, self.kernel_handler
         ncharge, nbaths, statesdm = si.ncharge, si.nbaths, si.statesdm
 
-        func_pauli = FuncPauliElPh(self.baths.tlst_ph, self.baths.dlst_ph,
-                                   self.baths.bath_func, self.funcp.eps_elph)
+        func_pauli = FuncPauliElPh(self.baths.tlst_ph, self.baths.dlst_ph,  self.baths.bath_func, self.funcp.eps_elph)
 
         paulifct = self.paulifct_elph
         for charge in range(ncharge):

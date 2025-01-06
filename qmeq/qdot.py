@@ -156,13 +156,17 @@ def construct_manybody_eigenstates(qd, hsingle, coulomb, statelst, ham_=None):
         len(statelst) by len(statelst) array containing eigenvector matrix of Hamiltonian.
         Columns of ham_vecs correspond to particular eigenvectors.
     """
+    debug_print(f"DEBUG: construct_manybody_eigenstates() statelst: {statelst}")
     if ham_ is not None:
         ham = ham_
     else:
         ham_coulomb = construct_ham_coulomb(qd, coulomb, statelst)
         ham_hopping = construct_ham_hopping(qd, hsingle, statelst)
         ham = ham_coulomb + ham_hopping
+    debug_print(f"DEBUG: construct_manybody_eigenstates() ham:\n{ham}")
     ham_vals, ham_vecs = np.linalg.eigh(ham)
+    debug_print(f"DEBUG: construct_manybody_eigenstates() ham_vals: {ham_vals}")
+    debug_print(f"DEBUG: construct_manybody_eigenstates() ham_vecs:\n{ham_vecs}")
     return ham_vals, ham_vecs
 
 
@@ -184,6 +188,7 @@ def construct_Ea_manybody(valslst, si):
     Ea : ndarray
         nmany by 1 array containing eigenvalues of the Hamiltonian.
     """
+    debug_print(f"DEBUG: construct_Ea_manybody() statelst: {valslst}")
     Ea = np.zeros(si.nmany, dtype=float)
     if si.indexing == 'sz':
         # Iterate over charges
