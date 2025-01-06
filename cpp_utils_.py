@@ -1,6 +1,6 @@
-
 import os
 import ctypes
+import numpy as np
 
 loaded_libs = {} 
 
@@ -18,36 +18,56 @@ BUILD_PATH   = os.path.normpath( PACKAGE_PATH + '../../../cpp/Build/libs/CombatM
 #print (" PACKAGE_PATH : ", PACKAGE_PATH)
 #print (" BUILD_PATH   : ", BUILD_PATH)
 
+# Type aliases for convenience
+c_double_p = ctypes.POINTER(ctypes.c_double)
+c_float_p = ctypes.POINTER(ctypes.c_float)
+c_int_p = ctypes.POINTER(ctypes.c_int)
+c_bool_p = ctypes.POINTER(ctypes.c_bool)
+
+def _np_as(arr,atype):
+    """Convert numpy array to C pointer type"""
+    if arr is None:
+        return None
+    elif isinstance(arr, str):
+        return arr.encode('utf-8')
+    else:
+        return arr.ctypes.data_as(atype)
+
+def work_dir(v__file__):
+    """Get directory of the current file"""
+    return os.path.dirname(os.path.realpath(v__file__))
+
+def compile_lib(name, FFLAGS="-std=c++17 -O3 -fPIC", LFLAGS="", path=None, clean=True):
+    """Compile a C++ library"""
+    lib_ext = '.so'
+    lib_name = name + lib_ext
+    
+    if path is not None:
+        dir_bak = os.getcwd()
+        os.chdir(path)
+    
+    print(" COMPILATION OF : " + name)
+    print(os.getcwd())
+    
+    if clean:
+        try:
+            os.remove(lib_name)
+            os.remove(name + ".o")
+        except:
+            pass
+    
+    os.system(f"g++ {FFLAGS} -c -fPIC {name}.cpp -o {name}.o {LFLAGS}")
+    os.system(f"g++ {FFLAGS} -shared -Wl,-soname,{lib_name} -o {lib_name} {name}.o {LFLAGS}")
+    
+    if path is not None:
+        os.chdir(dir_bak)
+
 def set_args_dict( lib, argDict):
     for k,v in  argDict.items():
         f = lib.__getattr__(k)
         f.restype  = v[0]
         f.argtypes = v[1]
         
-
-def compile_lib( name,
-        #FFLAGS = "-std=c++11 -Og -g -Wall",
-        FFLAGS = "-std=c++11 -O3 -ftree-vectorize -unroll-loops -ffast-math",
-        LFLAGS = "-I/usr/local/include/SDL2 -lSDL2",
-        path   = BUILD_PATH,
-        clean  = True,
-    ):
-    lib_name = name+lib_ext
-    print (" COMPILATION OF : "+name)
-    if path is not None:
-        dir_bak = os.getcwd()
-        os.chdir( path );
-    print (os.getcwd())
-    if clean:
-        try:
-            os.remove( lib_name  )
-            os.remove( name+".o" ) 
-        except:
-            pass 
-    os.system("g++ "+FFLAGS+" -c -fPIC "+name+".cpp -o "+name+".o "+LFLAGS )
-    os.system("g++ "+FFLAGS+" -shared -Wl,-soname,"+lib_name+" -o "+lib_name+" "+name+".o "+LFLAGS)
-    if path is not None:
-        os.chdir( dir_bak )
 
 def make( what="" ):
     current_directory = os.getcwd()
@@ -166,9 +186,3 @@ def writeFuncInterfaces( func_headers, debug=False ):
         print ("\n# ", s)
         #print (sgen,"\n\n")
         print (sgen)
-
-
-
-
-
-
