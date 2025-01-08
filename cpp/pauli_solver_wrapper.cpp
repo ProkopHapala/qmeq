@@ -1,5 +1,6 @@
 #include "pauli_solver.hpp"
 #include <cstdio>
+#include "print_utils.hpp"
 
 extern "C" {
 
@@ -36,7 +37,15 @@ void* create_pauli_solver(int nstates, int nleads,
         }
     }
     
-    return new PauliSolver(params, verbosity);
+    // Debug print tunneling amplitudes
+    if(verbosity > 0) {
+        printf("DEBUG: pauli_solver_wrapper.cpp tunneling amplitudes after conversion:\n");
+        print_3d_array(tunneling_amplitudes, nleads, nstates, nstates);
+    }
+    
+    PauliSolver* solver = new PauliSolver(params, verbosity);
+    
+    return solver;
 }
 
 // Solve the master equation

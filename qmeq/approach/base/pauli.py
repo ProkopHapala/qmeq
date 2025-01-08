@@ -48,6 +48,14 @@ class ApproachPauli(Approach):
         """
         if self.verbosity > 0:
             print("\nDEBUG: generate_fct() Calculating Pauli factors...")
+            print("\nDEBUG: QmeQ inputs:")
+            print(f"State energies (E):", self.qd.Ea)
+            print(f"Tunneling amplitudes (Tba):", self.leads.Tba)
+            print(f"Chemical potentials (mulst):", self.leads.mulst)
+            print(f"Temperatures (tlst):", self.leads.tlst)
+            print(f"Band parameters (dlst):", self.leads.dlst)
+            print(f"Number of charge states:", self.si.ncharge)
+            print(f"States by charge (statesdm):", self.si.statesdm)
             
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst

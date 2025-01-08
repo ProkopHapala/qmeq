@@ -2,9 +2,9 @@
 
 #include <vector>
 #include <cstring>
-#include <cstdio>
 #include <cmath>
 #include "gauss_solver.hpp"
+#include "print_utils.hpp"
 
 // Constants should be defined in meV units
 const double PI = 3.14159265358979323846;
@@ -42,50 +42,15 @@ public:
         return __builtin_popcount(state);
     }
 
-    // Print matrix in numpy style
-    void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr) {
-        if(label) printf("\n%s:\n", label);
-        printf("[");
-        for(int i = 0; i < rows; i++) {
-            printf("[");
-            for(int j = 0; j < cols; j++) {
-                printf("%7.3f", mat[i * cols + j]);
-                if (j < cols-1) printf(" ");
-            }
-            printf("]");
-            if (i < rows-1) printf("\n ");
+    // Get the site that changed in a transition between two states
+    // Returns -1 if more than one site changed or if no site changed
+    int get_changed_site(int state1, int state2) {
+        int diff = state1 ^ state2;
+        if (__builtin_popcount(diff) != 1) {
+            return -1;  // More than one site changed or no site changed
         }
-        printf("]\n");
-    }
-
-    // Print vector in numpy style
-    void print_vector(const double* vec, int size, const char* label = nullptr) {
-        if(label) printf("\n%s:\n", label);
-        printf("[");
-        for(int i = 0; i < size; i++) {
-            printf("%7.3f", vec[i]);
-            if (i < size-1) printf(" ");
-        }
-        printf("]\n");
-    }
-
-    // Print Pauli factors array
-    void print_pauli_factors(const char* label = nullptr) {
-        if(label) printf("\n%s:\n", label);
-        const int n = params.nstates;
-        printf("Shape: [%d leads, %d states, %d states, 2 directions]\n", params.nleads, n, n);
-        for(int l = 0; l < params.nleads; l++) {
-            printf("\nLead %d:\n", l);
-            for(int i = 0; i < n; i++) {
-                printf(" [");
-                for(int j = 0; j < n; j++) {
-                    int idx = l * n * n * 2 + i * n * 2 + j * 2;
-                    printf("[%7.3f %7.3f]", pauli_factors[idx], pauli_factors[idx + 1]);
-                    if (j < n-1) printf(" ");
-                }
-                printf("]\n");
-            }
-        }
+        // Find the position of the 1 bit in diff
+        return __builtin_ctz(diff);  // Count trailing zeros
     }
 
     // Calculate Fermi function for given energy difference and lead parameters
@@ -108,10 +73,51 @@ public:
             int charge = count_electrons(i);
             states_by_charge[charge].push_back(i);
         }
+
+        if(verbosity > 0) {
+            print_vector(states_by_charge, "DEBUG: C++ states_by_charge");
+            
+            printf("\nDEBUG: C++ coupling matrix elements:\n");
+            for(int l = 0; l < params.nleads; l++) {
+                for(int i = 0; i < n; i++) {
+                    for(int j = 0; j < n; j++) {
+                        if(params.coupling[l][i][j] != 0) {
+                            printf("DEBUG: C++ l:%d i:%d j:%d coupling:%.6f\n", 
+                                l, i, j, params.coupling[l][i][j]);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Generate Pauli factors for transitions between states
     void generate_fct() {
+        if(verbosity > 0) {
+            printf("\nDEBUG: C++ inputs:\n");
+            print_vector(params.energies.data(), params.nstates, "State energies (E)");
+            
+            printf("\nTunneling amplitudes (Tba):\n");
+            for(int l = 0; l < params.nleads; l++) {
+                printf("Lead %d:\n", l);
+                print_matrix(&params.coupling[l][0][0], params.nstates, params.nstates);
+            }
+            
+            std::vector<double> mu_vec(params.nleads);
+            for(int l = 0; l < params.nleads; l++) {
+                mu_vec[l] = params.leads[l].mu;
+            }
+            print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
+            
+            std::vector<double> temp_vec(params.nleads);
+            for(int l = 0; l < params.nleads; l++) {
+                temp_vec[l] = params.leads[l].temp;
+            }
+            print_vector(temp_vec.data(), params.nleads, "Temperatures (temp)");
+            
+            print_vector(states_by_charge, "States by charge");
+        }
+        
         if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
         
         const int n = params.nstates;
@@ -135,17 +141,25 @@ public:
                     for(int l = 0; l < params.nleads; l++) {
                         const int idx = l * n * n * 2 + c * n * 2 + b * 2;
                         
+                        // Get the site that changed in this transition
+                        int changed_site = get_changed_site(c, b);
+                        
                         // Calculate coupling strength
                         double coupling = params.coupling[l][b][c] * params.coupling[l][c][b];
+                        
+                        // Apply position-dependent coupling for tip (lead 1)
+                        if (l == 1 && changed_site > 0) {  // For tip and sites 1,2
+                            coupling *= 0.09;  // (coeffT * coeffT) = 0.3 * 0.3
+                        }
                         
                         // Include lead parameters
                         const LeadParams& lead = params.leads[l];
                         double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
                         
                         // Store factors for both directions
-                        // Note: Python's func_pauli multiplies by 2π
-                        pauli_factors[idx + 0] = coupling * lead.gamma * fermi * 2 * PI;         // Forward
-                        pauli_factors[idx + 1] = coupling * lead.gamma * (1.0 - fermi) * 2 * PI; // Backward
+                        // Note: Python's func_pauli multiplies by 2π and coupling already includes gamma/π
+                        pauli_factors[idx + 0] = coupling * fermi * 2 * PI;         // Forward
+                        pauli_factors[idx + 1] = coupling * (1.0 - fermi) * 2 * PI; // Backward
                         
                         if(verbosity > 0) printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
                             l, c, b, energy_diff, coupling, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
@@ -155,7 +169,15 @@ public:
         }
         
         if(verbosity > 0) {
-            print_pauli_factors("Phase 1 - Pauli Factors");
+            printf("\nDEBUG: Pauli factors:\n");
+            for(int l = 0; l < params.nleads; l++) {
+                printf("Lead %d:\n", l);
+                for(int dir = 0; dir < 2; dir++) {
+                    printf("Direction %d:\n", dir);
+                    print_matrix(&pauli_factors[l * params.nstates * params.nstates * 2 + dir], 
+                               params.nstates, params.nstates);
+                }
+            }
         }
     }
 

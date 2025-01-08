@@ -8,10 +8,11 @@ from cpp_utils_ import compile_lib, work_dir, _np_as, c_double_p, c_int_p
 class PauliSolver:
     """Python wrapper for C++ PauliSolver class"""
     
-    def __init__(self):
+    def __init__(self, verbosity=0):
         """Initialize the solver by loading the C++ library"""
         self.lib = self._compile_and_load()
         self._setup_function_signatures()
+        self.verbosity = verbosity
         
     def _compile_and_load(self):
         """Compile and load the C++ library"""
@@ -57,6 +58,10 @@ class PauliSolver:
         Returns:
             solver: Handle to C++ solver instance
         """
+        if self.verbosity > 0:
+            print("DEBUG: pauli_solver_lib.py tunneling amplitudes:")
+            print(tunneling_amplitudes)
+            
         return self.lib.create_pauli_solver(
             nstates, nleads,
             _np_as(energies, c_double_p),
@@ -179,6 +184,9 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
     """
     tunneling_amplitudes = np.zeros((nleads, nstates, nstates))
     
+    print("\nDEBUG: Python tunneling amplitudes calculation:")
+    print(f"vs={vs:.6f}, vt={vt:.6f}, coeff_t={coeff_t:.6f}")
+    
     for lead in range(nleads):
         v = vs if lead == 0 else vt
         
@@ -196,8 +204,10 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
                         if lead == 1:  # Tip
                             coeff = 1.0 if site == 0 else coeff_t
                             tunneling_amplitudes[lead, j, i] = v * coeff
+                            print(f"DEBUG: Python l:{lead} i:{i} j:{j} site:{site} v:{v:.6f} coeff:{coeff:.6f} amplitude:{tunneling_amplitudes[lead,j,i]:.6f}")
                         else:
                             tunneling_amplitudes[lead, j, i] = v
+                            print(f"DEBUG: Python l:{lead} i:{i} j:{j} site:{site} v:{v:.6f} amplitude:{tunneling_amplitudes[lead,j,i]:.6f}")
                         break
     
     return tunneling_amplitudes
