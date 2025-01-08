@@ -331,3 +331,48 @@ public:
     const double* get_rhs() const { return rhs; }
     const double* get_pauli_factors() const { return pauli_factors; }
 };
+
+// Calculate tunneling amplitudes for given parameters
+void calculate_tunneling_amplitudes(SolverParams& params) {
+    if(params.verbosity > 0) {
+        printf("\nDEBUG: C++ tunneling amplitudes calculation:\n");
+        printf("vs=%.6f, vt=%.6f, coeff_t=%.6f\n", 
+               params.VS, params.VT, params.coeffT);
+    }
+    
+    // Initialize coupling matrix
+    params.coupling.resize(params.nleads);
+    for(int l = 0; l < params.nleads; l++) {
+        params.coupling[l].resize(params.nstates);
+        for(int i = 0; i < params.nstates; i++) {
+            params.coupling[l][i].resize(params.nstates, 0.0);
+        }
+    }
+    
+    // For each lead and pair of states
+    for(int l = 0; l < params.nleads; l++) {
+        double v = (l == 0) ? params.VS : params.VT;
+        
+        for(int i = 0; i < params.nstates; i++) {
+            for(int j = 0; j < params.nstates; j++) {
+                // Count number of different bits (must be 1 for valid transition)
+                int diff = i ^ j;
+                if(__builtin_popcount(diff) != 1) continue;
+                
+                // Get position of different bit (site index)
+                int site = __builtin_ctz(diff);
+                
+                // Calculate amplitude based on lead and site
+                double coeff = (l == 0 || site == 0) ? 1.0 : params.coeffT;
+                double amplitude = v * coeff;
+                
+                if(params.verbosity > 0) {
+                    printf("DEBUG: C++ l:%d i:%d j:%d site:%d v:%.6f coeff:%.6f amplitude:%.6f\n",
+                           l, i, j, site, v, coeff, amplitude);
+                }
+                
+                params.coupling[l][i][j] = amplitude;
+            }
+        }
+    }
+}

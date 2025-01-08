@@ -1,85 +1,77 @@
 #include "pauli_solver.hpp"
-#include <cstdio>
 #include "print_utils.hpp"
 
 extern "C" {
 
-// Create a solver instance
-void* create_pauli_solver(int nstates, int nleads, 
-                         double* energies, double* tunneling_amplitudes,
-                         double* lead_mu, double* lead_temp, double* lead_gamma,
-                         int verbosity = 0) {
-    SolverParams params;
+PauliSolver* create_pauli_solver(
+    int nstates, int nsingle,
+    const double* energies,
+    double eps1, double eps2, double eps3,
+    double t, double W, double VBias,
+    double GammaS, double GammaT,
+    double coeffE, double coeffT,
+    const double* lead_mu,
+    const double* lead_temp,
+    int verbosity
+) {
+    // Create parameters struct
+    SystemParams params;
     params.nstates = nstates;
-    params.nleads = nleads;
+    params.nsingle = nsingle;
+    params.nleads = 2;  // Fixed for this problem
     
     // Copy energies
     params.energies.resize(nstates);
     std::copy(energies, energies + nstates, params.energies.begin());
     
-    // Set up leads
-    params.leads.resize(nleads);
-    for(int i = 0; i < nleads; i++) {
-        params.leads[i].mu = lead_mu[i];
-        params.leads[i].temp = lead_temp[i];
-        params.leads[i].gamma = lead_gamma[i];
+    // Set single-particle parameters
+    params.eps1 = eps1;
+    params.eps2 = eps2;
+    params.eps3 = eps3;
+    params.t = t;
+    params.W = W;
+    params.VBias = VBias;
+    params.GammaS = GammaS;
+    params.GammaT = GammaT;
+    params.coeffE = coeffE;
+    params.coeffT = coeffT;
+    
+    // Calculate tunneling amplitudes VS and VT
+    params.VS = sqrt(params.GammaS * params.W / (2 * 3.14159265358979323846));
+    params.VT = sqrt(params.GammaT * params.W / (2 * 3.14159265358979323846));
+    
+    // Copy lead parameters
+    params.leads.resize(params.nleads);
+    for(int l = 0; l < params.nleads; l++) {
+        params.leads[l].mu = lead_mu[l];
+        params.leads[l].temp = lead_temp[l];
     }
     
-    // Set up coupling matrix
-    params.coupling.resize(nleads);
-    for(int l = 0; l < nleads; l++) {
-        params.coupling[l].resize(nstates);
-        for(int i = 0; i < nstates; i++) {
-            params.coupling[l][i].resize(nstates);
-            for(int j = 0; j < nstates; j++) {
-                params.coupling[l][i][j] = tunneling_amplitudes[l * nstates * nstates + i * nstates + j];
-            }
-        }
-    }
-    
-    // Debug print tunneling amplitudes
-    if(verbosity > 0) {
-        printf("DEBUG: pauli_solver_wrapper.cpp tunneling amplitudes after conversion:\n");
-        print_3d_array(tunneling_amplitudes, nleads, nstates, nstates);
-    }
-    
-    PauliSolver* solver = new PauliSolver(params, verbosity);
-    
-    return solver;
+    return new PauliSolver(params, verbosity);
 }
 
-// Solve the master equation
-void solve_pauli(void* solver_ptr) {
-    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
+void delete_pauli_solver(PauliSolver* solver) {
+    delete solver;
+}
+
+void solve_master_equation(PauliSolver* solver) {
     solver->solve();
 }
 
-// Get the kernel matrix
-void get_kernel(void* solver_ptr, double* out_kernel) {
-    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
-    const double* kernel = solver->get_kernel();
-    int n = solver->params.nstates;
-    std::memcpy(out_kernel, kernel, n * n * sizeof(double));
+const double* get_probabilities(PauliSolver* solver) {
+    return solver->get_probabilities();
 }
 
-// Get the probabilities
-void get_probabilities(void* solver_ptr, double* out_probs) {
-    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
-    const double* probs = solver->get_probabilities();
-    int n = solver->params.nstates;
-    std::memcpy(out_probs, probs, n * sizeof(double));
+const double* get_kernel(PauliSolver* solver) {
+    return solver->get_kernel();
 }
 
-// Calculate current through a lead
-double calculate_current(void* solver_ptr, int lead_idx) {
-    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
-    return solver->generate_current(lead_idx);
+const double* get_rhs(PauliSolver* solver) {
+    return solver->get_rhs();
 }
 
-// Cleanup
-void delete_pauli_solver(void* solver_ptr) {
-    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
-    delete solver;
+const double* get_pauli_factors(PauliSolver* solver) {
+    return solver->get_pauli_factors();
 }
 
 }
