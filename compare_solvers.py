@@ -109,8 +109,11 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print("DEBUG: Energies:", energies)
         print("DEBUG: States:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
         tunneling_amplitudes = calculate_tunneling_amplitudes(  NLeads, NStates, NSingle, VS, VT, coeffT )
-        print("DEBUG: compare_solvers.py tunneling amplitudes before C++:")
-        print(tunneling_amplitudes)
+        #print("DEBUG: compare_solvers.py tunneling amplitudes before C++ (in file compare_solvers.py):")
+        #print(tunneling_amplitudes)
+        #exit() # DEBUG - don ot remove this until we are sure our tunneling amplitudes are correct (same as those from qmeq pauli.py)
+
+        
         lead_mu              = np.array([muS, muT + VBias])
         lead_temp            = np.array([Temp, Temp])
         lead_gamma           = np.array([GammaS, GammaT])

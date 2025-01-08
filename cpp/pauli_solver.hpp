@@ -76,18 +76,8 @@ public:
 
         if(verbosity > 0) {
             print_vector(states_by_charge, "DEBUG: C++ states_by_charge");
-            
-            printf("\nDEBUG: C++ coupling matrix elements:\n");
-            for(int l = 0; l < params.nleads; l++) {
-                for(int i = 0; i < n; i++) {
-                    for(int j = 0; j < n; j++) {
-                        if(params.coupling[l][i][j] != 0) {
-                            printf("DEBUG: C++ l:%d i:%d j:%d coupling:%.6f\n", 
-                                l, i, j, params.coupling[l][i][j]);
-                        }
-                    }
-                }
-            }
+            printf("\nDEBUG: C++ coupling matrix elements in  PauliSolver::init_states_by_charge():\n");
+            print_3d_array(&params.coupling[0][0][0], params.nleads, n, n, "C++ coupling matrix elements");
         }
     }
 
@@ -97,10 +87,16 @@ public:
             printf("\nDEBUG: C++ inputs:\n");
             print_vector(params.energies.data(), params.nstates, "State energies (E)");
             
-            printf("\nTunneling amplitudes (Tba):\n");
+            printf("\nTunneling amplitudes (Tba) (in file pauli_solver.hpp):\n");
             for(int l = 0; l < params.nleads; l++) {
-                printf("Lead %d:\n", l);
-                print_matrix(&params.coupling[l][0][0], params.nstates, params.nstates);
+                printf("Tunneling amplitudes for Lead %d:\n", l);
+                std::vector<double> temp(params.nstates * params.nstates);
+                for(int i = 0; i < params.nstates; i++) {
+                    for(int j = 0; j < params.nstates; j++) {
+                        temp[i * params.nstates + j] = params.coupling[l][i][j];
+                    }
+                }
+                print_matrix(temp.data(), params.nstates, params.nstates);
             }
             
             std::vector<double> mu_vec(params.nleads);
@@ -118,6 +114,9 @@ public:
             print_vector(states_by_charge, "States by charge");
         }
         
+
+        exit(0); // DEBUG - We will keep this here until we are sure the leads tunelling amplitudes are correctly pased over the interface
+
         if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
         
         const int n = params.nstates;
@@ -179,6 +178,7 @@ public:
                 }
             }
         }
+        
     }
 
     // Generate coupling terms for a specific state
@@ -244,9 +244,9 @@ public:
             generate_coupling_terms(state);
         }
         
-        // Replace last row with normalization condition
+        // Replace first row with normalization condition
         for(int j = 0; j < n; j++) {
-            kernel[n * (n-1) + j] = 1.0;  // Sum of probabilities = 1
+            kernel[j] = 1.0;  // First row is all 1s
         }
         
         if(verbosity > 0) {
@@ -262,10 +262,10 @@ public:
         double* kern_copy = new double[n * n];
         std::copy(kernel, kernel + n * n, kern_copy);
         
-        // Set up RHS vector [0, 0, ..., 1]
+        // Set up RHS vector [1, 0, ..., 0]
         double* rhs = new double[n];
-        std::fill(rhs, rhs + n - 1, 0.0);
-        rhs[n - 1] = 1.0;
+        rhs[0] = 1.0;
+        std::fill(rhs + 1, rhs + n, 0.0);
         
         // Solve the system using GaussSolver
         GaussSolver::solve(kern_copy, rhs, probabilities, n);
@@ -295,8 +295,8 @@ public:
 
     // Solve the master equation
     void solve() {
-        generate_fct();
-        solve_kern();
+        generate_kern();  // First generate the kernel matrix
+        solve_kern();     // Then solve it
     }
 
     // Calculate current through a specific lead

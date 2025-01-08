@@ -39,8 +39,8 @@ void* create_pauli_solver(int nstates, int nleads,
     
     // Debug print tunneling amplitudes
     if(verbosity > 0) {
-        printf("DEBUG: pauli_solver_wrapper.cpp tunneling amplitudes after conversion:\n");
-        print_3d_array(tunneling_amplitudes, nleads, nstates, nstates);
+        printf("DEBUG: tunneling amplitudes after conversion ( in file pauli_solver_wrapper.cpp ):\n");
+        print_3d_array(tunneling_amplitudes, nleads, nstates, nstates, "Tuneling amplitudes for Lead ");
     }
     
     PauliSolver* solver = new PauliSolver(params, verbosity);

@@ -70,12 +70,29 @@ def construct_chargelst(nsingle):
         chargelst[charge] gives a list of state indices for given charge,
         chargelst[charge][ind] gives state index.
     """
+    print("\nDEBUG: QmeQ construct_chargelst() state ordering:")
+    print(f"Number of single particle states (nsingle): {nsingle}")
+    
     nmany = np.power(2, nsingle)
+    print(f"Total number of many-body states (nmany): {nmany}")
+    
     chargelst = [[] for _ in range(nsingle+1)]
+    print(f"Created {nsingle+1} empty lists for charges 0 to {nsingle}")
+    
     # Iterate over many-body states
+    print("\nAssigning states to charge sectors:")
     for j1 in range(nmany):
         state = integer_to_binarylist(j1, nsingle)
-        chargelst[sum(state)].append(j1)
+        charge = sum(state)
+        chargelst[charge].append(j1)
+        print(f"State {j1:2d} -> binary {state} -> charge {charge} -> added to chargelst[{charge}]")
+    
+    print("\nFinal charge grouping:")
+    for charge, states in enumerate(chargelst):
+        if states:  # Only print non-empty charge sectors
+            state_strings = [f"{state:0{nsingle}b}" for state in states]
+            print(f"Charge {charge}: states {states} (binary: {state_strings})")
+            
     return chargelst
 
 

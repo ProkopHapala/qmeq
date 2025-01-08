@@ -42,10 +42,10 @@ inline void print_vector(const std::vector<std::vector<int>>& vec, const char* l
 }
 
 // Print 3D array as a sequence of matrices
-inline void print_3d_array(const double* arr, int dim1, int dim2, int dim3, const char* label = nullptr) {
-    if(label) printf("%s", label);
+inline void print_3d_array(const double* arr, int dim1, int dim2, int dim3, const char* label = "Matrix") {
+    //if(label) printf("%s", label);
     for(int i = 0; i < dim1; i++) {
-        printf("\nMatrix %d:\n", i);
+        printf("\nMatrix %i:\n", i);
         print_matrix(&arr[i * dim2 * dim3], dim2, dim3);
     }
 }

@@ -58,19 +58,25 @@ class PauliSolver:
         Returns:
             solver: Handle to C++ solver instance
         """
+        # Ensure arrays are C-contiguous and in the correct format
+        energies = np.ascontiguousarray(energies, dtype=np.float64)
+        tunneling_amplitudes = np.ascontiguousarray(tunneling_amplitudes.transpose(0, 2, 1), dtype=np.float64)
+        lead_mu = np.ascontiguousarray(lead_mu, dtype=np.float64)
+        lead_temp = np.ascontiguousarray(lead_temp, dtype=np.float64)
+        lead_gamma = np.ascontiguousarray(lead_gamma, dtype=np.float64)
+        
         if self.verbosity > 0:
-            print("DEBUG: pauli_solver_lib.py tunneling amplitudes:")
+            print("\nDEBUG: pauli_solver_lib.py tunneling amplitudes before C++ (after transpose):")
             print(tunneling_amplitudes)
-            
-        return self.lib.create_pauli_solver(
+        
+        # Create solver
+        solver = self.lib.create_pauli_solver(
             nstates, nleads,
-            _np_as(energies, c_double_p),
-            _np_as(tunneling_amplitudes.ravel(), c_double_p),
-            _np_as(lead_mu, c_double_p),
-            _np_as(lead_temp, c_double_p),
-            _np_as(lead_gamma, c_double_p),
-            verbosity
+            _np_as(energies, c_double_p), _np_as(tunneling_amplitudes, c_double_p),
+            _np_as(lead_mu, c_double_p), _np_as(lead_temp, c_double_p), _np_as(lead_gamma, c_double_p),
+            self.verbosity
         )
+        return solver
     
     def solve(self, solver):
         """Solve the master equation"""
@@ -187,27 +193,50 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
     print("\nDEBUG: Python tunneling amplitudes calculation:")
     print(f"vs={vs:.6f}, vt={vt:.6f}, coeff_t={coeff_t:.6f}")
     
-    for lead in range(nleads):
-        v = vs if lead == 0 else vt
-        
-        for i in range(nstates):
-            for j in range(nstates):
-                # States must differ by exactly one electron
-                diff = count_electrons(i) - count_electrons(j)
-                if abs(diff) != 1:
-                    continue
-                
-                # Check if transition is valid (only one site changes)
-                for site in range(nsingle):
-                    if is_valid_transition(i, j, site):
-                        # Apply position-dependent coupling for tip
-                        if lead == 1:  # Tip
-                            coeff = 1.0 if site == 0 else coeff_t
-                            tunneling_amplitudes[lead, j, i] = v * coeff
-                            print(f"DEBUG: Python l:{lead} i:{i} j:{j} site:{site} v:{v:.6f} coeff:{coeff:.6f} amplitude:{tunneling_amplitudes[lead,j,i]:.6f}")
-                        else:
-                            tunneling_amplitudes[lead, j, i] = v
-                            print(f"DEBUG: Python l:{lead} i:{i} j:{j} site:{site} v:{v:.6f} amplitude:{tunneling_amplitudes[lead,j,i]:.6f}")
-                        break
+    # First, group states by charge number using QmeQ's ordering
+    # For nsingle=3, the ordering is:
+    # chargelst[0] = [0]       # (000)
+    # chargelst[1] = [1,2,4]   # (001,010,100)
+    # chargelst[2] = [3,5,6]   # (011,101,110)
+    # chargelst[3] = [7]       # (111)
+    states_by_charge = [[] for _ in range(nsingle + 1)]
+    for i in range(nstates):
+        # Get binary representation and count electrons
+        binary = format(i, f'0{nsingle}b')
+        charge = sum(int(bit) for bit in binary)
+        states_by_charge[charge].append(i)
     
+    # Print state grouping for debugging
+    print("\nDEBUG: States grouped by charge (QmeQ ordering):")
+    for charge, states in enumerate(states_by_charge):
+        state_strings = [format(state, f'0{nsingle}b') for state in states]
+        print(f"Charge {charge}: states {states} (binary: {state_strings})")
+        
+    # Calculate tunneling amplitudes between adjacent charge sectors
+    for charge in range(len(states_by_charge) - 1):
+        # Get states in current and next charge sector
+        states_q = states_by_charge[charge]      # Lower charge states
+        states_qp1 = states_by_charge[charge+1]  # Higher charge states
+        
+        for lead in range(nleads):
+            v = vs if lead == 0 else vt
+            
+            for i in states_qp1:  # Final states (higher charge)
+                for j in states_q:  # Initial states (lower charge)
+                    # Check if transition is valid (only one electron changes)
+                    for site in range(nsingle):
+                        if is_valid_transition(i, j, site):
+                            # Apply position-dependent coupling for tip
+                            if lead == 1:  # Tip
+                                coeff = 1.0 if site == 0 else coeff_t
+                                tunneling_amplitudes[lead, j, i] = v * coeff
+                                tunneling_amplitudes[lead, i, j] = v * coeff  # Hermitian conjugate
+                            else:  # Substrate
+                                tunneling_amplitudes[lead, j, i] = v
+                                tunneling_amplitudes[lead, i, j] = v  # Hermitian conjugate
+                            print(f"DEBUG: Python l:{lead} i:{i} ({format(i, f'0{nsingle}b')}) j:{j} ({format(j, f'0{nsingle}b')}) site:{site} v:{v:.6f}")
+                            break
+    
+    print("\nDEBUG: tunneling amplitudes PauliSolver::calculate_tunneling_amplitudes()  in pauli_solver_lib.py):")
+    print(tunneling_amplitudes)
     return tunneling_amplitudes
