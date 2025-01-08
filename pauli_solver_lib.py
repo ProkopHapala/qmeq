@@ -57,7 +57,7 @@ class PauliSolverLib:
         
         # Run cmake and make
         subprocess.run(["cmake", "."], cwd=cpp_dir, check=True)
-        subprocess.run(["make"], cwd=cpp_dir, check=True)
+        subprocess.run(["make","pauli_solver_wrapper"], cwd=cpp_dir, check=True)
         
         # Load the shared library
         return ctypes.CDLL(f"{cpp_dir}/libpauli_solver_wrapper.so")

@@ -62,8 +62,8 @@ struct SystemParams {
           muS(muS_), muT(muT_), Temp(Temp_) {
         
         // Calculate VS and VT from GammaS/T and W
-        double VS = sqrt(GammaS * W / (2 * PI));
-        double VT = sqrt(GammaT * W / (2 * PI));
+        //double VS = sqrt(GammaS * W / (2 * PI));
+        //double VT = sqrt(GammaT * W / (2 * PI));
         
         leads.resize(nleads);
         leads[0] = {muS_, Temp_, GammaS_ * 2.0 * M_PI};
@@ -265,7 +265,7 @@ public:
         }
         
         // Iterate through charge states (like Python's implementation)
-        for(int charge = 0; charge < states_by_charge.size() - 1; charge++) {
+        for(int charge = 0; charge < (int) states_by_charge.size() - 1; charge++) {
             int next_charge = charge + 1;
             
             // Iterate through states in current and next charge state

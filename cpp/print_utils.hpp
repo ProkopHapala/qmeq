@@ -29,14 +29,14 @@ inline void print_vector(const double* vec, int size, const char* label = nullpt
 inline void print_vector(const std::vector<std::vector<int>>& vec, const char* label = nullptr) {
     if(label) printf("%s", label);
     printf("[");
-    for(int i = 0; i < vec.size(); i++) {
+    for(int i = 0; i < (int)vec.size(); i++) {
         printf("[");
-        for(int j = 0; j < vec[i].size(); j++) {
+        for(int j = 0; j < (int)vec[i].size(); j++) {
             printf("%d", vec[i][j]);
-            if (j < vec[i].size()-1) printf(" ");
+            if (j < (int)vec[i].size()-1) printf(" ");
         }
         printf("]");
-        if (i < vec.size()-1) printf("\n ");
+        if (i < (int)vec.size()-1) printf("\n ");
     }
     printf("]\n");
 }
