@@ -171,8 +171,19 @@ def is_valid_transition(state1, state2, site):
     Returns:
         bool: True if transition is valid
     """
-    diff = state1 ^ state2
-    return diff == (1 << site)
+    # Convert states to binary
+    bin1 = [int(x) for x in format(state1, '03b')]
+    bin2 = [int(x) for x in format(state2, '03b')]
+    
+    # States should differ only at the specified site
+    for i in range(len(bin1)):
+        if i == site:
+            if bin1[i] == bin2[i]:  # Should be different at site
+                return False
+        else:
+            if bin1[i] != bin2[i]:  # Should be same elsewhere
+                return False
+    return True
 
 def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
     """Calculate tunneling amplitudes between states
@@ -193,12 +204,7 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
     print("\nDEBUG: Python tunneling amplitudes calculation:")
     print(f"vs={vs:.6f}, vt={vt:.6f}, coeff_t={coeff_t:.6f}")
     
-    # First, group states by charge number using QmeQ's ordering
-    # For nsingle=3, the ordering is:
-    # chargelst[0] = [0]       # (000)
-    # chargelst[1] = [1,2,4]   # (001,010,100)
-    # chargelst[2] = [3,5,6]   # (011,101,110)
-    # chargelst[3] = [7]       # (111)
+    # First, group states by charge number
     states_by_charge = [[] for _ in range(nsingle + 1)]
     for i in range(nstates):
         # Get binary representation and count electrons
@@ -207,36 +213,52 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
         states_by_charge[charge].append(i)
     
     # Print state grouping for debugging
-    print("\nDEBUG: States grouped by charge (QmeQ ordering):")
+    print("\nDEBUG: States grouped by charge (our ordering):")
     for charge, states in enumerate(states_by_charge):
         state_strings = [format(state, f'0{nsingle}b') for state in states]
         print(f"Charge {charge}: states {states} (binary: {state_strings})")
         
-    # Calculate tunneling amplitudes between adjacent charge sectors
-    for charge in range(len(states_by_charge) - 1):
-        # Get states in current and next charge sector
-        states_q = states_by_charge[charge]      # Lower charge states
-        states_qp1 = states_by_charge[charge+1]  # Higher charge states
+    # Iterate over all many-body states
+    for j1 in range(nstates):
+        # Get binary representation of state
+        state = [int(x) for x in format(j1, f'0{nsingle}b')]
         
-        for lead in range(nleads):
-            v = vs if lead == 0 else vt
+        # Iterate over all single-particle states
+        for j2 in range(nsingle):
+            # Calculate fermion sign for added/removed electron
+            fsign = np.power(-1, sum(state[0:j2]))
             
-            for i in states_qp1:  # Final states (higher charge)
-                for j in states_q:  # Initial states (lower charge)
-                    # Check if transition is valid (only one electron changes)
-                    for site in range(nsingle):
-                        if is_valid_transition(i, j, site):
-                            # Apply position-dependent coupling for tip
-                            if lead == 1:  # Tip
-                                coeff = 1.0 if site == 0 else coeff_t
-                                tunneling_amplitudes[lead, j, i] = v * coeff
-                                tunneling_amplitudes[lead, i, j] = v * coeff  # Hermitian conjugate
-                            else:  # Substrate
-                                tunneling_amplitudes[lead, j, i] = v
-                                tunneling_amplitudes[lead, i, j] = v  # Hermitian conjugate
-                            print(f"DEBUG: Python l:{lead} i:{i} ({format(i, f'0{nsingle}b')}) j:{j} ({format(j, f'0{nsingle}b')}) site:{site} v:{v:.6f}")
-                            break
+            # For each lead
+            for lead in range(nleads):
+                v = vs if lead == 0 else vt
+                # For tip, coupling depends on which site changes
+                if lead == 1:  # Tip
+                    coeff = 1.0 if j2 == nsingle-1 else coeff_t
+                    tamp = v * coeff
+                else:  # Substrate
+                    tamp = v
+                
+                if state[j2] == 0:  # Can add an electron
+                    # Create new state with electron added at j2
+                    statep = list(state)
+                    statep[j2] = 1
+                    # Convert binary state back to index
+                    ind = int(''.join(map(str, statep)), 2)
+                    # Add tunneling amplitude
+                    tunneling_amplitudes[lead, j1, ind] = fsign * tamp
+                    tunneling_amplitudes[lead, ind, j1] = -fsign * tamp  # Hermitian conjugate
+                else:  # Can remove an electron
+                    # Create new state with electron removed at j2
+                    statep = list(state)
+                    statep[j2] = 0
+                    # Convert binary state back to index
+                    ind = int(''.join(map(str, statep)), 2)
+                    # Add tunneling amplitude
+                    tunneling_amplitudes[lead, j1, ind] = fsign * tamp
+                    tunneling_amplitudes[lead, ind, j1] = -fsign * tamp  # Hermitian conjugate
     
-    print("\nDEBUG: tunneling amplitudes PauliSolver::calculate_tunneling_amplitudes()  in pauli_solver_lib.py):")
-    print(tunneling_amplitudes)
+    print("\nDEBUG: Final tunneling amplitudes matrix in PauliSolver::calculate_tunneling_amplitudes() of pauli_solver_lib.py :")
+    for lead in range(nleads):
+        print(f"\nLead {lead}:")
+        print(tunneling_amplitudes[lead])
     return tunneling_amplitudes

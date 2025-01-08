@@ -51,7 +51,7 @@ class ApproachPauli(Approach):
             print("\nDEBUG: QmeQ inputs:")
             print(f"State energies (E):", self.qd.Ea)
             #print(f"Tunneling amplitudes (Tba):", self.leads.Tba)
-            print(f"Tunneling amplitudes (Tba):", (self.leads.Tba).real) 
+            print(f"Tunneling amplitudes (Tba) in pauli.py of QmeQ:\n", (self.leads.Tba).real) 
             print(f"Chemical potentials (mulst):", self.leads.mulst)
             print(f"Temperatures (tlst):", self.leads.tlst)
             print(f"Band parameters (dlst):", self.leads.dlst)
