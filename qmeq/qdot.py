@@ -930,21 +930,35 @@ class QuantumDot(object):
 
     def diagonalise(self):
         """Diagonalises Hamiltonians for all charge states."""
+        print("\nDEBUG: QuantumDot.diagonalise() - Starting diagonalization")
+        print("DEBUG: Single-particle Hamiltonian (hsingle):", self.hsingle)
+        print("DEBUG: Coulomb interaction (coulomb):", self.coulomb)
+        
         if self.si.indexing == 'sz':
             for charge in range(self.si.ncharge):
                 for sz in szrange(charge, self.si.nsingle):
-                    self.diagonalise_charge(charge, sz)
+                    print(f"\nDEBUG: Diagonalizing charge={charge}, sz={sz}")
+                    vals, vecs = self.diagonalise_charge(charge, sz)
+                    print(f"DEBUG: Eigenvalues: {vals}")
+                    print(f"DEBUG: Eigenvectors:\n{vecs}")
         elif self.si.indexing == 'ssq':
             for charge in range(self.si.ncharge):
                 szlow = -(charge % 2)
                 szind = sz_to_ind(szlow, charge, self.si.nsingle)
-                (self.valslst[charge], self.vecslst[charge]) = (
+                print(f"\nDEBUG: Diagonalizing charge={charge} with ssq symmetry")
+                self.valslst[charge], self.vecslst[charge] = (
                     construct_manybody_eigenstates_ssq_all(self, charge, self.hsingle, self.coulomb,
-                                                           self.hamlst[charge][szind]))
+                                                       self.hamlst[charge][szind]))
+                print(f"DEBUG: Eigenvalues: {self.valslst[charge]}")
+                print(f"DEBUG: Eigenvectors:\n{self.vecslst[charge]}")
         else:
             for charge in range(self.si.ncharge):
-                self.diagonalise_charge(charge)
+                print(f"\nDEBUG: Diagonalizing charge={charge}")
+                vals, vecs = self.diagonalise_charge(charge)
+                print(f"DEBUG: Eigenvalues: {vals}")
+                print(f"DEBUG: Eigenvectors:\n{vecs}")
         self.set_Ea()
+        print("\nDEBUG: Final state energies (Ea):", self.Ea)
 
     def set_Ea(self):
         """Sets the many-body eigenstates using construct_Ea_manybody()."""

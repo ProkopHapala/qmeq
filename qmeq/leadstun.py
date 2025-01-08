@@ -144,19 +144,23 @@ def rotate_Tba(Tba0, vecslst, si, indexing=None, mtype=complex):
         nleads by nmany by nmany numpy array containing many-body tunneling amplitudes.
         The returned Tba corresponds to the quantum dot eigenbasis.
     """
+    print("\nDEBUG: rotate_Tba() - Starting basis rotation")
+    print("DEBUG: Initial tunneling amplitudes (Fock basis):")
+    for lead in range(Tba0.shape[0]):
+        print(f"\nLead {lead}:")
+        print(Tba0[lead])
+    
     if indexing is None:
-        indexingp = si.indexing
-    else:
-        indexingp = indexing
-    Tba = np.zeros((si.nleads, si.nmany, si.nmany), dtype=mtype)
-    if indexingp == 'Lin':
+        indexing = si.indexing
+    Tba = np.zeros(Tba0.shape, dtype=mtype)
+    if indexing == 'Lin':
         pmtr = construct_full_pmtr(vecslst, si, mtype)
         for l in range(si.nleads):
             # Calculate many-body tunneling matrix Tba=P^(-1).Tba0.P
             # in eigenbasis of Hamiltonian from tunneling matrix Tba0 in Fock basis.
             # pmtr.conj().T denotes the conjugate transpose of pmtr.
             Tba[l] = np.dot(pmtr.conj().T, np.dot(Tba0[l], pmtr))
-    elif indexingp == 'sz':
+    elif indexing == 'sz':
         for l, charge in itertools.product(range(si.nleads), range(si.ncharge-1)):
             szrng = szrange(charge, si.nsingle)
             # Lead labels from 0 to nleads//2 correspond to spin up
@@ -178,7 +182,7 @@ def rotate_Tba(Tba0, vecslst, si, indexing=None, mtype=complex):
                                                  np.dot(Tba0[l, i1:i2][:, i3:i4],
                                                         vecslst[charge+1][szind2]))
                 Tba[l, i3:i4][:, i1:i2] = Tba[l, i1:i2][:, i3:i4].conj().T
-    elif indexingp == 'ssq':
+    elif indexing == 'ssq':
         for l, charge in itertools.product(range(si.nleads), range(si.ncharge-1)):
             szrng = szrange(charge, si.nsingle)
             # Lead labels from 0 to nleads//2 correspond to spin up
@@ -200,7 +204,7 @@ def rotate_Tba(Tba0, vecslst, si, indexing=None, mtype=complex):
                                                  np.dot(Tba0[l, i1:i2][:, i3:i4],
                                                         vecslst2))
                 Tba[l, i3:i4][:, i1:i2] = Tba[l, i1:i2][:, i3:i4].conj().T
-    elif indexingp == 'charge':
+    elif indexing == 'charge':
         for l, charge in itertools.product(range(si.nleads), range(si.ncharge-1)):
             if not si.chargelst[charge] or not si.chargelst[charge+1]:
                 continue
@@ -212,6 +216,10 @@ def rotate_Tba(Tba0, vecslst, si, indexing=None, mtype=complex):
                                              np.dot(Tba0[l, i1:i2][:, i3:i4],
                                                     vecslst[charge+1]))
             Tba[l, i3:i4][:, i1:i2] = Tba[l, i1:i2][:, i3:i4].conj().T
+    print("\nDEBUG: Final tunneling amplitudes (eigenstate basis):")
+    for lead in range(Tba.shape[0]):
+        print(f"\nLead {lead}:")
+        print(Tba[lead])
     return Tba
 # ---------------------------------------------------------------------------------------------------
 
