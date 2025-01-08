@@ -60,18 +60,24 @@ bool is_valid_transition(int state1, int state2, int site) {
 
 int main() {
     // Create system parameters
-    SystemParams params;
+    SolverParams params;
     params.nstates = NStates;
     params.nleads = NLeads;
     
     // Allocate and fill energies
-    params.energies = new double[NStates];
+    params.energies.resize(NStates);
     for(int i = 0; i < NStates; i++) {
         params.energies[i] = calculate_state_energy(i);
     }
     
-    // Allocate and fill tunneling amplitudes
-    params.tunneling_amplitudes = new double[NLeads * NStates * NStates]();
+    // Allocate and fill coupling matrix
+    params.coupling.resize(NLeads);
+    for(int l = 0; l < NLeads; l++) {
+        params.coupling[l].resize(NStates);
+        for(int i = 0; i < NStates; i++) {
+            params.coupling[l][i].resize(NStates);
+        }
+    }
     
     // For each lead and each pair of states
     for(int lead = 0; lead < NLeads; lead++) {
@@ -88,55 +94,38 @@ int main() {
                 for(int site = 0; site < NSingle; site++) {
                     if(is_valid_transition(i, j, site)) {
                         valid = true;
+                        double v_mod = v;
                         // Apply position-dependent coupling for tip
                         if(lead == 1) {  // Tip
                             double coeff = (site == 0) ? 1.0 : 0.3;  // coeffT = 0.3 from Python
-                            v *= coeff;
+                            v_mod *= coeff;
                         }
+                        params.coupling[lead][i][j] = v_mod;
                         break;
                     }
-                }
-                
-                if(valid) {
-                    params.tunneling_amplitudes[lead * NStates * NStates + i * NStates + j] = v;
                 }
             }
         }
     }
     
-    // Set up lead parameters
-    params.leads = new LeadParams[NLeads];
-    params.leads[0] = {muS, Temp, GammaS};  // Substrate
-    params.leads[1] = {muT + VBias, Temp, GammaT};  // Tip
-
-    // Create and run solver
-    PauliSolver solver(params);
+    // Initialize lead parameters
+    params.leads.resize(NLeads);
+    
+    // Substrate lead
+    params.leads[0].mu = muS;
+    params.leads[0].temp = Temp;
+    params.leads[0].gamma = GammaS * 2.0 * M_PI;  // Convert from QmeQ's Γ/(2π) to Γ
+    
+    // Tip lead
+    params.leads[1].mu = muT;
+    params.leads[1].temp = Temp;
+    params.leads[1].gamma = GammaT * 2.0 * M_PI;  // Convert from QmeQ's Γ/(2π) to Γ
+    
+    // Create solver
+    PauliSolver solver(params, 1);  // verbosity = 1
+    
+    // Solve
     solver.solve();
-
-    // Get results
-    const double* probabilities = solver.get_probabilities();
-    const double* kernel = solver.get_kernel();
     
-    // Print kernel matrix
-    std::cout << "Kernel matrix:\n";
-    for(int i = 0; i < NStates; i++) {
-        for(int j = 0; j < NStates; j++) {
-            std::cout << std::setw(10) << std::setprecision(3) << std::fixed 
-                      << kernel[i * NStates + j] << " ";
-        }
-        std::cout << "\n";
-    }
-    
-    // Print probabilities
-    std::cout << "\nProbabilities:\n";
-    for(int i = 0; i < NStates; i++) {
-        std::cout << "p[" << i << "] = " << std::setprecision(6) << probabilities[i] << "\n";
-    }
-
-    // Cleanup
-    delete[] params.energies;
-    delete[] params.tunneling_amplitudes;
-    delete[] params.leads;
-
     return 0;
 }

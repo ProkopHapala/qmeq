@@ -66,7 +66,12 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
     
     # Run QmeQ solver
     if bRunQmeq:
-        print( "\n\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
+        print( "\n\n######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
         system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
         system.appr.verbosity = verbosity  # Set verbosity after instance creation
         system.verbosity = verbosity
@@ -84,7 +89,12 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
 
     # Run C++ solver
     if bRunCpp:
-        print( "\n\n### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp " )
+        print( "\n\n######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp " )
         NStates = 2**NSingle
         energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) 
                             for i in range(NStates)])

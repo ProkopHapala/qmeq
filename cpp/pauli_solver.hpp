@@ -1,10 +1,9 @@
-#ifndef PAULI_SOLVER_HPP
-#define PAULI_SOLVER_HPP
+#pragma once
 
-#include <cmath>
+#include <vector>
 #include <cstring>
-#include <cassert>
 #include <cstdio>
+#include <cmath>
 #include "gauss_solver.hpp"
 
 // Constants should be defined in meV units
@@ -12,156 +11,257 @@ const double PI = 3.14159265358979323846;
 const double HBAR = 0.6582119;  // Reduced Planck constant in meV*ps
 const double KB = 0.08617333;   // Boltzmann constant in meV/K
 
-// Structure to hold lead parameters
+// Lead parameters
 struct LeadParams {
-    double mu;      // Chemical potential
-    double temp;    // Temperature
-    double gamma;   // Coupling strength (wide-band limit)
+    double mu;    // Chemical potential
+    double temp;  // Temperature
+    double gamma; // Coupling strength
 };
 
-// Structure to hold system parameters
-struct SystemParams {
-    int nstates;    // Total number of many-body states
-    int nleads;     // Number of leads
-    double* energies;  // Array of state energies [nstates]
-    double* tunneling_amplitudes;  // Array of tunneling amplitudes [nleads][nstates][nstates]
-    LeadParams* leads;  // Array of lead parameters [nleads]
+// Parameters for the solver
+struct SolverParams {
+    int nstates;  // Number of states
+    int nleads;   // Number of leads
+    std::vector<double> energies;  // State energies
+    std::vector<LeadParams> leads; // Lead parameters
+    std::vector<std::vector<std::vector<double>>> coupling; // Coupling matrix elements
 };
 
-// Fermi-Dirac distribution function
-inline double fermi_func(double energy, double mu, double temp) {
-    if(temp == 0.0) return (energy <= mu) ? 1.0 : 0.0;
-    return 1.0 / (1.0 + exp((energy - mu) / temp));
-}
+class PauliSolver {
+public:
+    SolverParams params;
+    double* kernel;         // Kernel matrix
+    double* rhs;           // Right-hand side vector
+    double* probabilities; // State probabilities
+    double* pauli_factors; // Pauli factors for transitions
+    int verbosity;        // Verbosity level for debugging
+    std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
 
-void print_matrix(double* matrix, int nrows, int ncols) {
-    for(int i = 0; i < nrows; i++) {
-        for(int j = 0; j < ncols; j++) {
-            printf("%.6f ", matrix[i * ncols + j]);
-        }
-        printf("\n");
+    // Count number of electrons in a state
+    int count_electrons(int state) {
+        return __builtin_popcount(state);
     }
-}
 
-class PauliSolver { public:
-    SystemParams params;
-    double* kernel;        // Kernel matrix L [nstates x nstates]
-    double* rhs;          // Right-hand side vector b [nstates]
-    double* probabilities; // State probabilities p [nstates]
-    double* pauli_factors; // Transition factors [nleads][nstates][nstates][2]
-    int verbosity = 0;
-    
-    // Calculate Pauli factors for a transition
-    void generate_fct() {
-        if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
+    // Print matrix in numpy style
+    void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr) {
+        if(label) printf("\n%s:\n", label);
+        printf("[");
+        for(int i = 0; i < rows; i++) {
+            printf("[");
+            for(int j = 0; j < cols; j++) {
+                printf("%7.3f", mat[i * cols + j]);
+                if (j < cols-1) printf(" ");
+            }
+            printf("]");
+            if (i < rows-1) printf("\n ");
+        }
+        printf("]\n");
+    }
+
+    // Print vector in numpy style
+    void print_vector(const double* vec, int size, const char* label = nullptr) {
+        if(label) printf("\n%s:\n", label);
+        printf("[");
+        for(int i = 0; i < size; i++) {
+            printf("%7.3f", vec[i]);
+            if (i < size-1) printf(" ");
+        }
+        printf("]\n");
+    }
+
+    // Print Pauli factors array
+    void print_pauli_factors(const char* label = nullptr) {
+        if(label) printf("\n%s:\n", label);
         const int n = params.nstates;
-        const int nl = params.nleads;
-        
-        // For each lead and pair of states
-        for(int l = 0; l < nl; l++) {
+        printf("Shape: [%d leads, %d states, %d states, 2 directions]\n", params.nleads, n, n);
+        for(int l = 0; l < params.nleads; l++) {
+            printf("\nLead %d:\n", l);
             for(int i = 0; i < n; i++) {
+                printf(" [");
                 for(int j = 0; j < n; j++) {
                     int idx = l * n * n * 2 + i * n * 2 + j * 2;
-                    double energy_diff = params.energies[i] - params.energies[j];
-                    double tunneling = params.tunneling_amplitudes[l * n * n + j * n + i];
-                    double coupling = tunneling * tunneling;  // |⟨i|H_tunneling|j⟩|^2
+                    printf("[%7.3f %7.3f]", pauli_factors[idx], pauli_factors[idx + 1]);
+                    if (j < n-1) printf(" ");
+                }
+                printf("]\n");
+            }
+        }
+    }
+
+    // Calculate Fermi function for given energy difference and lead parameters
+    double fermi_func(double energy_diff, double mu, double temp) {
+        return 1.0/(1.0 + exp((energy_diff - mu)/temp));
+    }
+
+    // Initialize states by charge number
+    void init_states_by_charge() {
+        const int n = params.nstates;
+        int max_charge = 0;
+        // Find maximum charge number
+        for(int i = 0; i < n; i++) {
+            max_charge = std::max(max_charge, count_electrons(i));
+        }
+        // Initialize the vector with empty vectors
+        states_by_charge.resize(max_charge + 1);
+        // Fill in states for each charge
+        for(int i = 0; i < n; i++) {
+            int charge = count_electrons(i);
+            states_by_charge[charge].push_back(i);
+        }
+    }
+
+    // Generate Pauli factors for transitions between states
+    void generate_fct() {
+        if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
+        
+        const int n = params.nstates;
+        memset(pauli_factors, 0, params.nleads * n * n * 2 * sizeof(double));
+        
+        // Make sure states are organized by charge
+        if(states_by_charge.empty()) {
+            init_states_by_charge();
+        }
+        
+        // Iterate through charge states (like Python's implementation)
+        for(int charge = 0; charge < states_by_charge.size() - 1; charge++) {
+            int next_charge = charge + 1;
+            
+            // Iterate through states in current and next charge state
+            for(int c : states_by_charge[next_charge]) {
+                for(int b : states_by_charge[charge]) {
+                    double energy_diff = params.energies[c] - params.energies[b];
                     
-                    // Include lead parameters
-                    const LeadParams& lead = params.leads[l];
-                    double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
-                    
-                    // Store factors for both directions (like QmeQ's paulifct)
-                    pauli_factors[idx + 0] = coupling * lead.gamma * fermi * (2.0 * PI) / HBAR;        // Forward
-                    pauli_factors[idx + 1] = coupling * lead.gamma * (1.0 - fermi) * (2.0 * PI) / HBAR; // Backward
-                    
-                    if(verbosity > 0) printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n",  l, i, j, energy_diff, coupling, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
+                    // For each lead
+                    for(int l = 0; l < params.nleads; l++) {
+                        const int idx = l * n * n * 2 + c * n * 2 + b * 2;
+                        
+                        // Calculate coupling strength
+                        double coupling = params.coupling[l][b][c] * params.coupling[l][c][b];
+                        
+                        // Include lead parameters
+                        const LeadParams& lead = params.leads[l];
+                        double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
+                        
+                        // Store factors for both directions
+                        // Note: Python's func_pauli multiplies by 2π
+                        pauli_factors[idx + 0] = coupling * lead.gamma * fermi * 2 * PI;         // Forward
+                        pauli_factors[idx + 1] = coupling * lead.gamma * (1.0 - fermi) * 2 * PI; // Backward
+                        
+                        if(verbosity > 0) printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
+                            l, c, b, energy_diff, coupling, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
+                    }
                 }
             }
         }
+        
+        if(verbosity > 0) {
+            print_pauli_factors("Phase 1 - Pauli Factors");
+        }
     }
 
-    // Set kernel matrix elements for a specific state
+    // Generate coupling terms for a specific state
     void generate_coupling_terms(int state) {
         if(verbosity > 0) printf("\nDEBUG: generate_coupling_terms() state:%d\n", state);
+        
         const int n = params.nstates;
-        const int nl = params.nleads;
+        int state_elec = count_electrons(state);
+        double diagonal = 0.0;
         
-        double diagonal_sum = 0.0;
-        
-        // Handle transitions to other states
+        // Handle transitions from lower charge states (a → b)
         for(int other = 0; other < n; other++) {
-            if(other == state) continue;
-            
-            int state_elec = count_electrons(state);
             int other_elec = count_electrons(other);
-            if(abs(state_elec - other_elec) != 1) continue; // Only single electron transitions
+            if(other_elec != state_elec - 1) continue;  // Only from lower charge states
             
-            double total_rate = 0.0;
-            for(int l = 0; l < nl; l++) {
-                int idx = l * n * n * 2 + state * n * 2 + other * 2;
-                // Use appropriate factor based on electron number difference
-                total_rate += (state_elec > other_elec) ? 
-                             pauli_factors[idx + 1] :  // Electron leaving
-                             pauli_factors[idx + 0];   // Electron entering
+            double rate = 0.0;
+            for(int l = 0; l < params.nleads; l++) {
+                int idx = l * n * n * 2 + other * n * 2 + state * 2;
+                rate += pauli_factors[idx + 0];  // Electron entering
             }
-            
-            kernel[state * n + other] = total_rate;
-            diagonal_sum += total_rate;
-            
-            if(verbosity > 0) printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n",   state, other, total_rate);
+            kernel[other * n + state] = rate;  // Off-diagonal term
+            diagonal -= rate;  // Add to diagonal term
         }
         
-        // Set diagonal element
-        kernel[state * n + state] = -diagonal_sum;
-        if(verbosity > 0) printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n",   state, -diagonal_sum);
+        // Handle transitions to higher charge states (b → c)
+        for(int other = 0; other < n; other++) {
+            int other_elec = count_electrons(other);
+            if(other_elec != state_elec + 1) continue;  // Only to higher charge states
+            
+            double rate = 0.0;
+            for(int l = 0; l < params.nleads; l++) {
+                int idx = l * n * n * 2 + other * n * 2 + state * 2;
+                rate += pauli_factors[idx + 1];  // Electron leaving
+            }
+            kernel[other * n + state] = rate;  // Off-diagonal term
+            diagonal -= rate;  // Add to diagonal term
+        }
+        
+        // Set diagonal term
+        kernel[state * n + state] = diagonal;
+        
+        if(verbosity > 0) {
+            printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n", 
+                state, diagonal);
+            print_matrix(kernel, n, n, "Phase 2 - After processing state");
+        }
     }
 
-    
-
-    // Build the full kernel matrix
+    // Generate kernel matrix
     void generate_kern() {
         if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
+        
         const int n = params.nstates;
         
-        // Initialize arrays
-        memset(kernel, 0, n * n * sizeof(double));
-        memset(rhs, 0, n * sizeof(double));
+        // Calculate Pauli factors first
+        generate_fct();
         
-        // Generate kernel matrix elements for each state
-        for(int state = 0; state < n-1; state++) {
+        // Initialize kernel matrix to zero
+        std::fill(kernel, kernel + n * n, 0.0);
+        
+        // Generate coupling terms for each state
+        for(int state = 0; state < n; state++) {
             generate_coupling_terms(state);
         }
         
         // Replace last row with normalization condition
         for(int j = 0; j < n; j++) {
-            kernel[(n-1) * n + j] = 1.0;
+            kernel[n * (n-1) + j] = 1.0;  // Sum of probabilities = 1
         }
-        rhs[n-1] = 1.0;  // Σp_i = 1
         
-        if(verbosity > 0){ 
-            printf("DEBUG: generate_kern() Kernel matrix:\n");
-            print_matrix( kernel, n, n);
+        if(verbosity > 0) {
+            print_matrix(kernel, n, n, "Phase 2 - After normalization");
         }
     }
 
-    // Count number of electrons in a state
-    int count_electrons(int state) {
-        int count = 0;
-        while(state) {
-            count += state & 1;
-            state >>= 1;
-        }
-        return count;
-    }
-
-public:
-    PauliSolver(const SystemParams& p, int verbosity_=0 ) : params(p), verbosity(verbosity_) {
+    // Solve the kernel matrix equation
+    void solve_kern() {
         const int n = params.nstates;
-        const int nl = params.nleads;
+        
+        // Create a copy of kernel matrix since solve() modifies it
+        double* kern_copy = new double[n * n];
+        std::copy(kernel, kernel + n * n, kern_copy);
+        
+        // Set up RHS vector [0, 0, ..., 1]
+        double* rhs = new double[n];
+        std::fill(rhs, rhs + n - 1, 0.0);
+        rhs[n - 1] = 1.0;
+        
+        // Solve the system using GaussSolver
+        GaussSolver::solve(kern_copy, rhs, probabilities, n);
+        
+        delete[] kern_copy;
+        delete[] rhs;
+        
+        if(verbosity > 0) {
+            print_vector(probabilities, n, "Probabilities after solve");
+        }
+    }
+
+    PauliSolver(const SolverParams& p, int verb = 0) : params(p), verbosity(verb) {
+        const int n = params.nstates;
         kernel = new double[n * n];
         rhs = new double[n];
         probabilities = new double[n];
-        pauli_factors = new double[nl * n * n * 2]; // [nleads][nstates][nstates][2]
+        pauli_factors = new double[params.nleads * n * n * 2];
     }
 
     ~PauliSolver() {
@@ -171,13 +271,10 @@ public:
         delete[] pauli_factors;
     }
 
-    // Solve the Pauli master equation
+    // Solve the master equation
     void solve() {
         generate_fct();
-        generate_kern();
-        
-        const int n = params.nstates;
-        GaussSolver::solve(kernel, rhs, probabilities, n);
+        solve_kern();
     }
 
     // Calculate current through a specific lead
@@ -199,7 +296,8 @@ public:
                              pauli_factors[idx + 0];   // Electron entering
                 
                 current += rate * probabilities[j] * (i_elec > j_elec ? -1.0 : 1.0);
-                if(verbosity > 0) printf("DEBUG: generate_current() i:%d j:%d rate:%.6f prob:%.6f contrib:%.6f\n",  i, j, rate, probabilities[j], rate * probabilities[j] * (i_elec > j_elec ? -1.0 : 1.0));
+                if(verbosity > 0) printf("DEBUG: generate_current() i:%d j:%d rate:%.6f prob:%.6f contrib:%.6f\n",
+                    i, j, rate, probabilities[j], rate * probabilities[j] * (i_elec > j_elec ? -1.0 : 1.0));
             }
         }
         return current;
@@ -208,7 +306,6 @@ public:
     // Getter methods
     const double* get_kernel() const { return kernel; }
     const double* get_probabilities() const { return probabilities; }
-    int get_nstates() const { return params.nstates; }
+    const double* get_rhs() const { return rhs; }
+    const double* get_pauli_factors() const { return pauli_factors; }
 };
-
-#endif // PAULI_SOLVER_HPP

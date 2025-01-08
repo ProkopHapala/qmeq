@@ -6,28 +6,37 @@ extern "C" {
 // Create a solver instance
 void* create_pauli_solver(int nstates, int nleads, 
                          double* energies, double* tunneling_amplitudes,
-                         double* lead_mu, double* lead_temp, double* lead_gamma,int verbosity = 0) {
-    SystemParams params;
+                         double* lead_mu, double* lead_temp, double* lead_gamma,
+                         int verbosity = 0) {
+    SolverParams params;
     params.nstates = nstates;
     params.nleads = nleads;
     
-    // Allocate and copy energies
-    params.energies = new double[nstates];
-    std::memcpy(params.energies, energies, nstates * sizeof(double));
+    // Copy energies
+    params.energies.resize(nstates);
+    std::copy(energies, energies + nstates, params.energies.begin());
     
-    // Allocate and copy tunneling amplitudes
-    params.tunneling_amplitudes = new double[nleads * nstates * nstates];
-    std::memcpy(params.tunneling_amplitudes, tunneling_amplitudes, nleads * nstates * nstates * sizeof(double));
-    
-    // Allocate and set up leads
-    params.leads = new LeadParams[nleads];
+    // Set up leads
+    params.leads.resize(nleads);
     for(int i = 0; i < nleads; i++) {
         params.leads[i].mu = lead_mu[i];
         params.leads[i].temp = lead_temp[i];
         params.leads[i].gamma = lead_gamma[i];
     }
     
-    return new PauliSolver(params, verbosity );
+    // Set up coupling matrix
+    params.coupling.resize(nleads);
+    for(int l = 0; l < nleads; l++) {
+        params.coupling[l].resize(nstates);
+        for(int i = 0; i < nstates; i++) {
+            params.coupling[l][i].resize(nstates);
+            for(int j = 0; j < nstates; j++) {
+                params.coupling[l][i][j] = tunneling_amplitudes[l * nstates * nstates + i * nstates + j];
+            }
+        }
+    }
+    
+    return new PauliSolver(params, verbosity);
 }
 
 // Solve the master equation
@@ -40,7 +49,7 @@ void solve_pauli(void* solver_ptr) {
 void get_kernel(void* solver_ptr, double* out_kernel) {
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     const double* kernel = solver->get_kernel();
-    int n = solver->get_nstates();
+    int n = solver->params.nstates;
     std::memcpy(out_kernel, kernel, n * n * sizeof(double));
 }
 
@@ -48,7 +57,7 @@ void get_kernel(void* solver_ptr, double* out_kernel) {
 void get_probabilities(void* solver_ptr, double* out_probs) {
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     const double* probs = solver->get_probabilities();
-    int n = solver->get_nstates();
+    int n = solver->params.nstates;
     std::memcpy(out_probs, probs, n * sizeof(double));
 }
 

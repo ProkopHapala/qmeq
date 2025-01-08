@@ -67,8 +67,7 @@ class ApproachPauli(Approach):
                     paulifct[l, cb, 0] = xcb*rez[0]  # Forward
                     paulifct[l, cb, 1] = xcb*rez[1]  # Backward
                     if self.verbosity > 0:
-                        print(f"DEBUG: generate_fct() l:{l} i:{c} j:{b} E_diff:{Ecb:.6f} coupling:{xcb:.6f} "
-                              f"fermi:{rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
+                        print(f"DEBUG: generate_fct() l:{l} i:{c} j:{b} E_diff:{Ecb:.6f} coupling:{xcb:.6f} fermi:{rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
 
     def generate_kern(self):
         """
@@ -86,7 +85,12 @@ class ApproachPauli(Approach):
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
 
+        if self.verbosity > 0:debug_print("DEBUG: ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(ncharge, statesdm))
+
         self.generate_fct()
+        if self.verbosity > 0:print("DEBUG: ApproachPauli.generate_kern() after generate_fct() kh.kern:\n", kh.kern)
+        #exit(0)
+
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:
                 if not kh.is_unique(b, b, bcharge):
