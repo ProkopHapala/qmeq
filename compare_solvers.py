@@ -1,3 +1,111 @@
+import numpy as np
+import qmeq
+
+import qmeq
+# from qmeq.approach.base.pauli import PauliSolver as QmeqPauliSolver
+# from qmeq.builder_base import StateIndexingDM
+# from qmeq.specfunc import Func1
+
+np.set_printoptions(linewidth=256, suppress=True)
+
+from pauli_solver_lib import PauliSolverLib
+
+def run_solvers(bRunQmeq=True, bRunCpp=True):
+    eps1 = -5.0
+    eps2 = 0.0
+    eps3 = 5.0
+    t = 0.1
+    W = 1.0
+    VBias = 0.0
+    GammaS = 0.01
+    GammaT = 0.01
+    coeffE = 1.0
+    coeffT = 1.0
+    Temp = 0.5
+    muS = 0.0
+    muT = 0.0
+    
+    NSingle = 3
+    NStates = 2**NSingle
+    NLeads = 2
+    
+    qmeq_res = None
+    if bRunQmeq:
+        print("\nRunning QMeq solver...")
+        
+        indexing = StateIndexingDM(NSingle)
+        pauli = QmeqPauliSolver(indexing)
+        
+        pauli.add_parameters({
+            'e1': eps1, 'e2': eps2, 'e3': eps3,
+            't12': t, 't23': t*coeffT, 't13': 0.0,
+            'gammaL1': GammaS, 'gammaR1': 0.0,
+            'gammaL2': 0.0, 'gammaR2': 0.0,
+            'gammaL3': 0.0, 'gammaR3': GammaT,
+            'temp': Temp,
+            'muL': muS, 'muR': muT + VBias,
+            'dband': W
+        })
+        
+        pauli.solve()
+        
+        qmeq_res = {
+            'current': pauli.current[1],
+            'energies': pauli.energies,
+            'probabilities': pauli.si.get_vec_dm(pauli.si.dvec),
+            'kernel': pauli.kern
+        }
+        print("\nQMeq probabilities:", qmeq_res['probabilities'])
+        print("QMeq current:", qmeq_res['current'])
+    
+    cpp_res = None
+    if bRunCpp:
+        print("\nRunning C++ solver...")
+        
+        print( "\n\n######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp " )
+        print("\nDEBUG: System parameters:")
+        print(f"NSingle={NSingle}, NLeads={NLeads}")
+        print(f"eps1={eps1}, eps2={eps2}, eps3={eps3}")
+        print(f"t={t}, W={W}, VBias={VBias}")
+        print(f"GammaS={GammaS}, GammaT={GammaT}")
+        print(f"coeffE={coeffE}, coeffT={coeffT}")
+        
+        solver = PauliSolverLib(verbosity=1)
+        cpp_probs, cpp_kernel, cpp_rhs, cpp_factors = solver.solve(
+            nsingle=NSingle,
+            eps1=eps1, eps2=eps2, eps3=eps3,
+            t=t, W=W, VBias=VBias,
+            GammaS=GammaS, GammaT=GammaT,
+            coeffE=coeffE, coeffT=coeffT,
+            muS=muS, muT=muT,
+            Temp=Temp
+        )
+        
+        cpp_res = {
+            'current': cpp_rhs[1],
+            'energies': cpp_kernel[0],  # First row contains energies
+            'probabilities': cpp_probs,
+            'kernel': cpp_kernel,
+        }
+        print("\nC++ states:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
+        print("C++ energies:", cpp_res['energies'])
+    
+    return qmeq_res, cpp_res
+
+def main():
+    qmeq_res, cpp_res = run_solvers()
+    
+    if qmeq_res is not None and cpp_res is not None:
+        print("\nComparing results:")
+        print("Energy difference:", np.max(np.abs(qmeq_res['energies'] - cpp_res['energies'])))
+        print("Probability difference:", np.max(np.abs(qmeq_res['probabilities'] - cpp_res['probabilities'])))
+        print("Kernel difference:", np.max(np.abs(qmeq_res['kernel'] - cpp_res['kernel'])))
+        print("Current difference:", np.abs(qmeq_res['current'] - cpp_res['current']))
 #!/usr/bin/env python3
 
 import numpy as np
@@ -9,7 +117,7 @@ import qmeq
 np.set_printoptions(linewidth=256, suppress=True)
 #np.set_printoptions(linewidth=256, suppress=False)
 
-from pauli_solver_lib import PauliSolver, calculate_state_energy, calculate_tunneling_amplitudes
+from pauli_solver_lib import PauliSolverLib
 
 def run_solvers( bRunQmeq=True, bRunCpp=True ):
 
@@ -103,33 +211,25 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print(f"VS={VS}, VT={VT}")
         print(f"coeffE={coeffE}, coeffT={coeffT}")
         
-        NStates = 2**NSingle
-        energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) 
-                            for i in range(NStates)])
-        print("DEBUG: Energies:", energies)
-        print("DEBUG: States:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
-        tunneling_amplitudes = calculate_tunneling_amplitudes(  NLeads, NStates, NSingle, VS, VT, coeffT )
-        print("DEBUG: compare_solvers.py tunneling amplitudes before C++:")
-        print(tunneling_amplitudes)
-        lead_mu              = np.array([muS, muT + VBias])
-        lead_temp            = np.array([Temp, Temp])
-        lead_gamma           = np.array([GammaS, GammaT])
-        pauli                = PauliSolver()
-        solver               = pauli.create_solver(   NStates, NLeads, energies, tunneling_amplitudes,  lead_mu, lead_temp, lead_gamma, verbosity)
-        pauli.solve(solver)
-        kernel               = pauli.get_kernel(solver, NStates)
-        probabilities        = pauli.get_probabilities(solver, NStates)
-        currents             = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
-        pauli.cleanup(solver)
+        solver = PauliSolverLib(verbosity=1)
+        cpp_probs, cpp_kernel, cpp_rhs, cpp_factors = solver.solve(
+            nsingle=NSingle,
+            eps1=eps1, eps2=eps2, eps3=eps3,
+            t=t, W=W, VBias=VBias,
+            GammaS=GammaS, GammaT=GammaT,
+            coeffE=coeffE, coeffT=coeffT,
+            muS=muS, muT=muT,
+            Temp=Temp
+        )
         
         cpp_res = {
-            'current': currents[1],
-            'energies': energies,
-            'probabilities': probabilities,
-            'kernel': kernel,
+            'current': cpp_rhs[1],
+            'energies': cpp_kernel[0],  # First row contains energies
+            'probabilities': cpp_probs,
+            'kernel': cpp_kernel,
         }
-        print("\nC++ states:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
-        print("C++ energies:", energies)
+        print("\nC++ states:", [bin(i)[2:].zfill(NSingle) for i in range(2**NSingle)])
+        print("C++ energies:", cpp_res['energies'])
     
     return qmeq_res, cpp_res
 

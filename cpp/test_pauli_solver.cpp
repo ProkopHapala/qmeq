@@ -60,7 +60,7 @@ bool is_valid_transition(int state1, int state2, int site) {
 
 int main() {
     // Create system parameters
-    SolverParams params;
+    SystemParams params;
     params.nstates = NStates;
     params.nleads = NLeads;
     

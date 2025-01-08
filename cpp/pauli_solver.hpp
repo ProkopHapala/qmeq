@@ -1,127 +1,263 @@
 #pragma once
 
 #include <vector>
-#include <cstring>
 #include <cmath>
-#include "gauss_solver.hpp"
+#include <iostream>
+#include <iomanip>
+#include <bitset>
 #include "print_utils.hpp"
+#include "gauss_solver.hpp"
 
 // Constants should be defined in meV units
 const double PI = 3.14159265358979323846;
-const double HBAR = 0.6582119;  // Reduced Planck constant in meV*ps
-const double KB = 0.08617333;   // Boltzmann constant in meV/K
+const double kB = 8.617333262e-2;  // Boltzmann constant in meV/K
 
-// Lead parameters
 struct LeadParams {
     double mu;    // Chemical potential
     double temp;  // Temperature
     double gamma; // Coupling strength
 };
 
-// Parameters for the solver
-struct SolverParams {
-    int nstates;  // Number of states
+// System parameters
+struct SystemParams {
+    // Basic system parameters
+    int nsingle;  // Number of single-particle states
+    int nstates;  // Number of many-body states (2^nsingle)
     int nleads;   // Number of leads
-    std::vector<double> energies;  // State energies
+    
+    // Single-particle parameters
+    double eps1;  // Site energies
+    double eps2;
+    double eps3;
+    
+    double t;     // Hopping parameter
+    double W;     // Inter-site coupling
+    double VBias; // Bias voltage
+    
+    double GammaS; // Coupling to substrate
+    double GammaT; // Coupling to tip
+    double coeffE; // Energy coefficient
+    double coeffT; // Tunneling coefficient
+    
+    double muS;   // Substrate chemical potential
+    double muT;   // Tip chemical potential
+    double Temp;  // Temperature
+    
     std::vector<LeadParams> leads; // Lead parameters
-    std::vector<std::vector<std::vector<double>>> coupling; // Coupling matrix elements
+    
+    // Calculated arrays
+    std::vector<double> energies;
+    std::vector<std::vector<std::vector<double>>> coupling;
+    
+    SystemParams() {} // Default constructor
+    
+    SystemParams(int nsingle_, double eps1_, double eps2_, double eps3_,
+                double t_, double W_, double VBias_,
+                double GammaS_, double GammaT_, double coeffE_, double coeffT_,
+                double muS_, double muT_, double Temp_)
+        : nsingle(nsingle_), nstates(1 << nsingle_), nleads(2),
+          eps1(eps1_), eps2(eps2_), eps3(eps3_),
+          t(t_), W(W_), VBias(VBias_),
+          GammaS(GammaS_), GammaT(GammaT_), coeffE(coeffE_), coeffT(coeffT_),
+          muS(muS_), muT(muT_), Temp(Temp_) {
+        
+        // Calculate VS and VT from GammaS/T and W
+        double VS = sqrt(GammaS * W / (2 * PI));
+        double VT = sqrt(GammaT * W / (2 * PI));
+        
+        leads.resize(nleads);
+        leads[0] = {muS_, Temp_, GammaS_ * 2.0 * M_PI};
+        leads[1] = {muT_, Temp_, GammaT_ * 2.0 * M_PI};
+        
+        // Initialize arrays
+        energies.resize(nstates);
+        coupling.resize(nleads);
+        for(int l = 0; l < nleads; l++) {
+            coupling[l].resize(nstates);
+            for(int i = 0; i < nstates; i++) {
+                coupling[l][i].resize(nstates, 0.0);
+            }
+        }
+    }
 };
 
 class PauliSolver {
-public:
-    SolverParams params;
-    double* kernel;         // Kernel matrix
-    double* rhs;           // Right-hand side vector
-    double* probabilities; // State probabilities
-    double* pauli_factors; // Pauli factors for transitions
-    int verbosity;        // Verbosity level for debugging
-    std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
-
-    // Count number of electrons in a state
-    int count_electrons(int state) {
+private:
+    SystemParams params;
+    int verbosity;
+    std::vector<std::vector<int>> states_by_charge;
+    std::vector<double> pauli_factors;
+    std::vector<double> probabilities;
+    double* kernel;
+    double* rhs;
+    
+    // Get number of electrons in a state
+    int get_state_charge(int state) {
         return __builtin_popcount(state);
     }
 
-    // Get the site that changed in a transition between two states
-    // Returns -1 if more than one site changed or if no site changed
-    int get_changed_site(int state1, int state2) {
+    // Get position of the different bit between two states
+    int get_transition_site(int state1, int state2) {
         int diff = state1 ^ state2;
-        if (__builtin_popcount(diff) != 1) {
-            return -1;  // More than one site changed or no site changed
-        }
-        // Find the position of the 1 bit in diff
+        if(__builtin_popcount(diff) != 1) return -1;
         return __builtin_ctz(diff);  // Count trailing zeros
     }
 
     // Calculate Fermi function for given energy difference and lead parameters
     double fermi_func(double energy_diff, double mu, double temp) {
-        return 1.0/(1.0 + exp((energy_diff - mu)/temp));
+        double x = (energy_diff - mu)/temp;
+        if (x > 700.0) return 0.0;  // exp(x) would overflow
+        if (x < -700.0) return 1.0; // exp(x) would underflow
+        return 1.0/(1.0 + exp(x));
     }
-
-    // Initialize states by charge number
-    void init_states_by_charge() {
-        const int n = params.nstates;
-        int max_charge = 0;
-        // Find maximum charge number
-        for(int i = 0; i < n; i++) {
-            max_charge = std::max(max_charge, count_electrons(i));
+    
+    // Calculate energy of a given state
+    double calculate_state_energy(int state) {
+        double energy = 0.0;
+        
+        // Add site energies for occupied sites
+        if(state & 1) energy += params.eps1;
+        if(state & 2) energy += params.eps2;
+        if(state & 4) energy += params.eps3;
+        
+        // Add interaction energy between electrons
+        if(params.W != 0.0) {
+            // Between sites 1-2
+            if((state & 1) && (state & 2)) energy += params.W;
+            // Between sites 2-3
+            if((state & 2) && (state & 4)) energy += params.W;
+            // Between sites 1-3
+            if((state & 1) && (state & 4)) energy += params.W;
         }
-        // Initialize the vector with empty vectors
-        states_by_charge.resize(max_charge + 1);
-        // Fill in states for each charge
-        for(int i = 0; i < n; i++) {
-            int charge = count_electrons(i);
-            states_by_charge[charge].push_back(i);
-        }
-
-        if(verbosity > 0) {
-            print_vector(states_by_charge, "DEBUG: C++ states_by_charge");
+        
+        // Add hopping terms
+        if(params.t != 0.0) {
+            // Between sites 1-2
+            if((state & 1) && !(state & 2)) energy += params.t;
+            if(!(state & 1) && (state & 2)) energy += params.t;
             
-            printf("\nDEBUG: C++ coupling matrix elements:\n");
-            for(int l = 0; l < params.nleads; l++) {
-                for(int i = 0; i < n; i++) {
-                    for(int j = 0; j < n; j++) {
-                        if(params.coupling[l][i][j] != 0) {
-                            printf("DEBUG: C++ l:%d i:%d j:%d coupling:%.6f\n", 
-                                l, i, j, params.coupling[l][i][j]);
-                        }
+            // Between sites 2-3
+            if((state & 2) && !(state & 4)) energy += params.t * params.coeffT;
+            if(!(state & 2) && (state & 4)) energy += params.t * params.coeffT;
+        }
+        
+        // Add bias voltage contribution
+        if(params.VBias != 0.0 && params.coeffE != 0.0) {
+            double bias_factor = 0.0;
+            if(state & 1) bias_factor += 0.0;        // Site 1
+            if(state & 2) bias_factor += 0.5;        // Site 2
+            if(state & 4) bias_factor += 1.0;        // Site 3
+            energy += params.VBias * params.coeffE * bias_factor;
+        }
+        
+        return energy;
+    }
+    
+    // Calculate all state energies
+    void calculate_energies() {
+        if(verbosity > 0) printf("\nDEBUG: Calculating state energies...\n");
+        
+        for(int i = 0; i < params.nstates; i++) {
+            params.energies[i] = calculate_state_energy(i);
+            if(verbosity > 0) {
+                printf("State %s: %.6f\n", 
+                       std::bitset<3>(i).to_string().c_str(), 
+                       params.energies[i]);
+            }
+        }
+    }
+    
+    // Calculate tunneling amplitudes
+    void calculate_tunneling_amplitudes() {
+        if(verbosity > 0) {
+            printf("\nDEBUG: Calculating tunneling amplitudes...\n");
+            printf("coeffT=%.6f\n", params.coeffT);
+        }
+        
+        // For each lead and pair of states
+        for(int l = 0; l < params.nleads; l++) {
+            double v = (l == 0) ? sqrt(params.leads[l].gamma / (2 * PI)) : sqrt(params.leads[l].gamma / (2 * PI));
+            
+            for(int i = 0; i < params.nstates; i++) {
+                for(int j = 0; j < params.nstates; j++) {
+                    // Count number of different bits (must be 1 for valid transition)
+                    int diff = i ^ j;
+                    if(__builtin_popcount(diff) != 1) continue;
+                    
+                    // Get position of different bit (site index)
+                    int site = __builtin_ctz(diff);
+                    
+                    // Calculate amplitude based on lead and site
+                    double coeff = (l == 0 || site == 0) ? 1.0 : params.coeffT;
+                    double amplitude = v * coeff;
+                    
+                    if(verbosity > 0) {
+                        printf("l:%d i:%d j:%d site:%d v:%.6f coeff:%.6f amplitude:%.6f\n",
+                               l, i, j, site, v, coeff, amplitude);
                     }
+                    
+                    params.coupling[l][i][j] = amplitude;
                 }
             }
         }
     }
 
-    // Generate Pauli factors for transitions between states
-    void generate_fct() {
-        if(verbosity > 0) {
-            printf("\nDEBUG: C++ inputs:\n");
-            print_vector(params.energies.data(), params.nstates, "State energies (E)");
-            
-            printf("\nTunneling amplitudes (Tba):\n");
-            for(int l = 0; l < params.nleads; l++) {
-                printf("Lead %d:\n", l);
-                print_matrix(&params.coupling[l][0][0], params.nstates, params.nstates);
-            }
-            
-            std::vector<double> mu_vec(params.nleads);
-            for(int l = 0; l < params.nleads; l++) {
-                mu_vec[l] = params.leads[l].mu;
-            }
-            print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
-            
-            std::vector<double> temp_vec(params.nleads);
-            for(int l = 0; l < params.nleads; l++) {
-                temp_vec[l] = params.leads[l].temp;
-            }
-            print_vector(temp_vec.data(), params.nleads, "Temperatures (temp)");
-            
-            print_vector(states_by_charge, "States by charge");
+    // Initialize states by charge number
+    void init_states_by_charge() {
+        if(verbosity > 0) printf("\nDEBUG: Grouping states by charge...\n");
+        
+        int max_charge = 0;
+        for(int i = 0; i < params.nstates; i++) {
+            max_charge = std::max(max_charge, get_state_charge(i));
         }
         
+        states_by_charge.resize(max_charge + 1);
+        for(int i = 0; i < params.nstates; i++) {
+            int charge = get_state_charge(i);
+            states_by_charge[charge].push_back(i);
+            
+            if(verbosity > 0) {
+                printf("State %s: charge %d\n", 
+                       std::bitset<3>(i).to_string().c_str(), 
+                       charge);
+            }
+        }
+    }
+
+public:
+    PauliSolver(const SystemParams& p, int verb = 0) : params(p), verbosity(verb) {
+        if(verbosity > 0) {
+            printf("\nDEBUG: System parameters:\n");
+            printf("NSingle=%d, NLeads=%d\n", params.nsingle, params.nleads);
+            printf("eps1=%.1f, eps2=%.1f, eps3=%.1f\n", params.eps1, params.eps2, params.eps3);
+            printf("t=%.1f, W=%.1f, VBias=%.1f\n", params.t, params.W, params.VBias);
+            printf("GammaS=%.3f, GammaT=%.3f\n", params.GammaS, params.GammaT);
+            printf("coeffE=%.1f, coeffT=%.1f\n", params.coeffE, params.coeffT);
+        }
+        
+        // Allocate arrays
+        kernel = new double[params.nstates * params.nstates];
+        rhs = new double[params.nstates];
+        probabilities.resize(params.nstates);
+        pauli_factors.resize(params.nleads * params.nstates * params.nstates * 2, 0.0);
+        
+        // Initialize everything
+        calculate_energies();
+        calculate_tunneling_amplitudes();
+        init_states_by_charge();
+    }
+
+    ~PauliSolver() {
+        delete[] kernel;
+        delete[] rhs;
+    }
+
+    // Generate Pauli factors for transitions between states
+    void generate_fct() {
         if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
         
         const int n = params.nstates;
-        memset(pauli_factors, 0, params.nleads * n * n * 2 * sizeof(double));
+        pauli_factors.resize(params.nleads * n * n * 2, 0.0);
         
         // Make sure states are organized by charge
         if(states_by_charge.empty()) {
@@ -142,7 +278,7 @@ public:
                         const int idx = l * n * n * 2 + c * n * 2 + b * 2;
                         
                         // Get the site that changed in this transition
-                        int changed_site = get_changed_site(c, b);
+                        int changed_site = get_transition_site(c, b);
                         
                         // Calculate coupling strength
                         double coupling = params.coupling[l][b][c] * params.coupling[l][c][b];
@@ -153,8 +289,8 @@ public:
                         }
                         
                         // Include lead parameters
-                        const LeadParams& lead = params.leads[l];
-                        double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
+                        double mu = params.leads[l].mu;
+                        double fermi = fermi_func(energy_diff, mu, params.leads[l].temp);
                         
                         // Store factors for both directions
                         // Note: Python's func_pauli multiplies by 2π and coupling already includes gamma/π
@@ -186,12 +322,12 @@ public:
         if(verbosity > 0) printf("\nDEBUG: generate_coupling_terms() state:%d\n", state);
         
         const int n = params.nstates;
-        int state_elec = count_electrons(state);
+        int state_elec = get_state_charge(state);
         double diagonal = 0.0;
         
         // Handle transitions from lower charge states (a → b)
         for(int other = 0; other < n; other++) {
-            int other_elec = count_electrons(other);
+            int other_elec = get_state_charge(other);
             if(other_elec != state_elec - 1) continue;  // Only from lower charge states
             
             double rate = 0.0;
@@ -205,7 +341,7 @@ public:
         
         // Handle transitions to higher charge states (b → c)
         for(int other = 0; other < n; other++) {
-            int other_elec = count_electrons(other);
+            int other_elec = get_state_charge(other);
             if(other_elec != state_elec + 1) continue;  // Only to higher charge states
             
             double rate = 0.0;
@@ -263,34 +399,17 @@ public:
         std::copy(kernel, kernel + n * n, kern_copy);
         
         // Set up RHS vector [0, 0, ..., 1]
-        double* rhs = new double[n];
         std::fill(rhs, rhs + n - 1, 0.0);
         rhs[n - 1] = 1.0;
         
         // Solve the system using GaussSolver
-        GaussSolver::solve(kern_copy, rhs, probabilities, n);
+        GaussSolver::solve(kern_copy, rhs, &probabilities[0], n);
         
         delete[] kern_copy;
-        delete[] rhs;
         
         if(verbosity > 0) {
-            print_vector(probabilities, n, "Probabilities after solve");
+            print_vector(&probabilities[0], n, "Probabilities after solve");
         }
-    }
-
-    PauliSolver(const SolverParams& p, int verb = 0) : params(p), verbosity(verb) {
-        const int n = params.nstates;
-        kernel = new double[n * n];
-        rhs = new double[n];
-        probabilities = new double[n];
-        pauli_factors = new double[params.nleads * n * n * 2];
-    }
-
-    ~PauliSolver() {
-        delete[] kernel;
-        delete[] rhs;
-        delete[] probabilities;
-        delete[] pauli_factors;
     }
 
     // Solve the master equation
@@ -308,8 +427,8 @@ public:
         
         for(int i = 0; i < n; i++) {
             for(int j = 0; j < n; j++) {
-                int i_elec = count_electrons(i);
-                int j_elec = count_electrons(j);
+                int i_elec = get_state_charge(i);
+                int j_elec = get_state_charge(j);
                 if(abs(i_elec - j_elec) != 1) continue;
                 
                 int idx = lead_idx * n * n * 2 + j * n * 2 + i * 2;
@@ -327,52 +446,7 @@ public:
 
     // Getter methods
     const double* get_kernel() const { return kernel; }
-    const double* get_probabilities() const { return probabilities; }
+    const double* get_probabilities() const { return &probabilities[0]; }
     const double* get_rhs() const { return rhs; }
-    const double* get_pauli_factors() const { return pauli_factors; }
+    const double* get_pauli_factors() const { return &pauli_factors[0]; }
 };
-
-// Calculate tunneling amplitudes for given parameters
-void calculate_tunneling_amplitudes(SolverParams& params) {
-    if(params.verbosity > 0) {
-        printf("\nDEBUG: C++ tunneling amplitudes calculation:\n");
-        printf("vs=%.6f, vt=%.6f, coeff_t=%.6f\n", 
-               params.VS, params.VT, params.coeffT);
-    }
-    
-    // Initialize coupling matrix
-    params.coupling.resize(params.nleads);
-    for(int l = 0; l < params.nleads; l++) {
-        params.coupling[l].resize(params.nstates);
-        for(int i = 0; i < params.nstates; i++) {
-            params.coupling[l][i].resize(params.nstates, 0.0);
-        }
-    }
-    
-    // For each lead and pair of states
-    for(int l = 0; l < params.nleads; l++) {
-        double v = (l == 0) ? params.VS : params.VT;
-        
-        for(int i = 0; i < params.nstates; i++) {
-            for(int j = 0; j < params.nstates; j++) {
-                // Count number of different bits (must be 1 for valid transition)
-                int diff = i ^ j;
-                if(__builtin_popcount(diff) != 1) continue;
-                
-                // Get position of different bit (site index)
-                int site = __builtin_ctz(diff);
-                
-                // Calculate amplitude based on lead and site
-                double coeff = (l == 0 || site == 0) ? 1.0 : params.coeffT;
-                double amplitude = v * coeff;
-                
-                if(params.verbosity > 0) {
-                    printf("DEBUG: C++ l:%d i:%d j:%d site:%d v:%.6f coeff:%.6f amplitude:%.6f\n",
-                           l, i, j, site, v, coeff, amplitude);
-                }
-                
-                params.coupling[l][i][j] = amplitude;
-            }
-        }
-    }
-}

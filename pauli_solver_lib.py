@@ -3,121 +3,114 @@
 import numpy as np
 import os
 import ctypes
+import subprocess
 from pathlib import Path
 
-class PauliSolver:
+class PauliSolverLib:
     """Python wrapper for C++ PauliSolver class"""
     
     def __init__(self, verbosity=0):
         self.verbosity = verbosity
-        self.solver = None
         self.lib = self._compile_and_load()
-        self._setup_function_signatures()
-    
-    def _compile_and_load(self):
-        """Compile and load the C++ library"""
-        cpp_dir = Path(os.path.dirname(__file__)) / "cpp"
         
-        # Compile the wrapper
-        os.system(f"g++ -O3 -fPIC -shared -o {cpp_dir}/libpauli_solver.so "
-                 f"{cpp_dir}/pauli_solver_wrapper.cpp")
-        
-        return ctypes.CDLL(f"{cpp_dir}/libpauli_solver.so")
-    
-    def _setup_function_signatures(self):
-        """Set up the C++ function signatures"""
-        # Create solver
+        # Set function argument and return types
         self.lib.create_pauli_solver.argtypes = [
-            ctypes.c_int,      # nstates
-            ctypes.c_int,      # nsingle
-            ctypes.POINTER(ctypes.c_double),  # energies
-            ctypes.c_double,   # eps1
-            ctypes.c_double,   # eps2
-            ctypes.c_double,   # eps3
-            ctypes.c_double,   # t
-            ctypes.c_double,   # W
-            ctypes.c_double,   # VBias
-            ctypes.c_double,   # GammaS
-            ctypes.c_double,   # GammaT
-            ctypes.c_double,   # coeffE
-            ctypes.c_double,   # coeffT
-            ctypes.POINTER(ctypes.c_double),  # lead_mu
-            ctypes.POINTER(ctypes.c_double),  # lead_temp
-            ctypes.c_int,      # verbosity
+            ctypes.c_int,     # nsingle
+            ctypes.c_double,  # eps1
+            ctypes.c_double,  # eps2
+            ctypes.c_double,  # eps3
+            ctypes.c_double,  # t
+            ctypes.c_double,  # W
+            ctypes.c_double,  # VBias
+            ctypes.c_double,  # GammaS
+            ctypes.c_double,  # GammaT
+            ctypes.c_double,  # coeffE
+            ctypes.c_double,  # coeffT
+            ctypes.c_double,  # muS
+            ctypes.c_double,  # muT
+            ctypes.c_double,  # Temp
+            ctypes.c_int,     # verbosity
         ]
         self.lib.create_pauli_solver.restype = ctypes.c_void_p
         
-        # Delete solver
-        self.lib.delete_pauli_solver.argtypes = [ctypes.c_void_p]
-        
-        # Solve master equation
-        self.lib.solve_master_equation.argtypes = [ctypes.c_void_p]
-        
-        # Get results
-        self.lib.get_probabilities.argtypes = [ctypes.c_void_p]
-        self.lib.get_probabilities.restype = ctypes.POINTER(ctypes.c_double)
+        self.lib.solve_pauli.argtypes = [ctypes.c_void_p]
+        self.lib.solve_pauli.restype = None
         
         self.lib.get_kernel.argtypes = [ctypes.c_void_p]
         self.lib.get_kernel.restype = ctypes.POINTER(ctypes.c_double)
         
-        self.lib.get_rhs.argtypes = [ctypes.c_void_p]
-        self.lib.get_rhs.restype = ctypes.POINTER(ctypes.c_double)
+        self.lib.get_probabilities.argtypes = [ctypes.c_void_p]
+        self.lib.get_probabilities.restype = ctypes.POINTER(ctypes.c_double)
         
         self.lib.get_pauli_factors.argtypes = [ctypes.c_void_p]
         self.lib.get_pauli_factors.restype = ctypes.POINTER(ctypes.c_double)
-    
-    def solve(self, energies, nsingle, eps1, eps2, eps3, t, W, VBias,
-             GammaS, GammaT, coeffE, coeffT, lead_mu, lead_temp):
-        """Solve the master equation using the C++ solver"""
-        # Convert numpy arrays to C arrays
-        nstates = len(energies)
         
-        energies_arr = energies.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        lead_mu_arr = lead_mu.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        lead_temp_arr = lead_temp.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        self.lib.get_rhs.argtypes = [ctypes.c_void_p]
+        self.lib.get_rhs.restype = ctypes.POINTER(ctypes.c_double)
+        
+        self.lib.delete_pauli_solver.argtypes = [ctypes.c_void_p]
+        self.lib.delete_pauli_solver.restype = None
+    
+    def _compile_and_load(self):
+        """Compile the C++ code and load the shared library"""
+        cpp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cpp")
+        
+        # Run cmake and make
+        subprocess.run(["cmake", "."], cwd=cpp_dir, check=True)
+        subprocess.run(["make"], cwd=cpp_dir, check=True)
+        
+        # Load the shared library
+        return ctypes.CDLL(f"{cpp_dir}/libpauli_solver_wrapper.so")
+    
+    def solve(self, nsingle, eps1, eps2, eps3, t, W, VBias,
+             GammaS, GammaT, coeffE, coeffT, muS, muT, Temp):
+        """Solve the master equation using the C++ solver"""
+        nstates = 1 << nsingle  # 2^nsingle
+        nleads = 2
         
         # Create solver instance
-        self.solver = self.lib.create_pauli_solver(
-            nstates, nsingle,
-            energies_arr,
+        solver = self.lib.create_pauli_solver(
+            nsingle,
             eps1, eps2, eps3,
             t, W, VBias,
             GammaS, GammaT,
             coeffE, coeffT,
-            lead_mu_arr, lead_temp_arr,
+            muS, muT, Temp,
             self.verbosity
         )
         
         # Solve master equation
-        self.lib.solve_master_equation(self.solver)
+        self.lib.solve_pauli(solver)
         
         # Get results
-        probabilities = np.ctypeslib.as_array(
-            self.lib.get_probabilities(self.solver),
-            shape=(nstates,)
-        )
-        
         kernel = np.ctypeslib.as_array(
-            self.lib.get_kernel(self.solver),
+            self.lib.get_kernel(solver),
             shape=(nstates, nstates)
-        )
+        ).copy()
+        
+        probabilities = np.ctypeslib.as_array(
+            self.lib.get_probabilities(solver),
+            shape=(nstates,)
+        ).copy()
         
         rhs = np.ctypeslib.as_array(
-            self.lib.get_rhs(self.solver),
+            self.lib.get_rhs(solver),
             shape=(nstates,)
-        )
+        ).copy()
         
         pauli_factors = np.ctypeslib.as_array(
-            self.lib.get_pauli_factors(self.solver),
-            shape=(2, nstates, nstates, 2)  # [nleads, nstates, nstates, 2]
-        )
+            self.lib.get_pauli_factors(solver),
+            shape=(nleads, nstates, nstates, 2)
+        ).copy()
+        
+        # Clean up
+        self.lib.delete_pauli_solver(solver)
         
         return probabilities, kernel, rhs, pauli_factors
     
     def __del__(self):
         """Clean up C++ solver"""
-        if self.solver is not None:
-            self.lib.delete_pauli_solver(self.solver)
+        pass
 
 def count_electrons(state):
     """Count number of electrons in a state"""
