@@ -68,7 +68,7 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
     if bRunQmeq:
         print( "\n\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
         system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
-        
+        system.appr.verbosity = verbosity  # Set verbosity after instance creation
         system.verbosity = verbosity
         system.solve()
         qmeq_res = {

@@ -93,11 +93,6 @@ class ApproachPauli(Approach):
                     continue
                 self.generate_coupling_terms(b, b, bcharge)
         debug_print("DEBUG: ApproachPauli.generate_kern() kh.kern:\n", kh.kern)
-        if self.verbosity > 0:
-            print("DEBUG: generate_kern() Kernel matrix:")
-            kernel = self.kernel_handler.get_kernel()
-            for row in kernel:
-                print(" ".join(f"{x:10.6f}" for x in row))
 
     def generate_coupling_terms(self, b, bp, bcharge):
         """Generate coupling terms for the Pauli master equation."""
@@ -138,9 +133,7 @@ class ApproachPauli(Approach):
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
             if self.verbosity > 0:
                 print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
-        
-        if self.verbosity > 0:
-            print(f"DEBUG: generate_coupling_terms() state:{b} diagonal:{kh.get_matrix_element(bb, bb):.6f}")
+
 
     def generate_current(self):
         """
