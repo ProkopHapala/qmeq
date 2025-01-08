@@ -244,18 +244,16 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
                     statep[j2] = 1
                     # Convert binary state back to index
                     ind = int(''.join(map(str, statep)), 2)
-                    # Add tunneling amplitude
-                    tunneling_amplitudes[lead, j1, ind] = fsign * tamp
-                    tunneling_amplitudes[lead, ind, j1] = -fsign * tamp  # Hermitian conjugate
+                    # Add tunneling amplitude (final_state, initial_state)
+                    tunneling_amplitudes[lead, ind, j1] = fsign * tamp
                 else:  # Can remove an electron
                     # Create new state with electron removed at j2
                     statep = list(state)
                     statep[j2] = 0
                     # Convert binary state back to index
                     ind = int(''.join(map(str, statep)), 2)
-                    # Add tunneling amplitude
-                    tunneling_amplitudes[lead, j1, ind] = fsign * tamp
-                    tunneling_amplitudes[lead, ind, j1] = -fsign * tamp  # Hermitian conjugate
+                    # Add tunneling amplitude (final_state, initial_state)
+                    tunneling_amplitudes[lead, ind, j1] = fsign * np.conj(tamp)
     
     print("\nDEBUG: Final tunneling amplitudes matrix in PauliSolver::calculate_tunneling_amplitudes() of pauli_solver_lib.py :")
     for lead in range(nleads):
