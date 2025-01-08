@@ -64,6 +64,71 @@ Key components in `leadstun.py`:
    - Proper tracking of charge sectors for valid transitions
    - Energy conservation in transition rates
 
+## Coulomb Interaction Handling
+
+### Implementation Details
+
+The Coulomb interaction in QmeQ is implemented as a many-body operator in the form:
+
+```
+H_coulomb = U * c†_m c†_n c_k c_l
+```
+
+where:
+- U is the interaction strength
+- c†, c are creation/annihilation operators
+- m,n,k,l are single-particle state indices
+
+Key implementation points:
+
+1. **Matrix Construction** (`qmeq/qdot.py:construct_ham_coulomb`):
+   - Operates on many-body Fock states, not single-particle states
+   - Constructs a many-body Hamiltonian matrix of dimension (N_many x N_many)
+   - For charge=1 sector, this is a 3x3 matrix
+   - For full space, this would be an 8x8 matrix (2^3 states)
+
+2. **Matrix Elements**:
+   - Only connects Fock states that differ by exactly two electrons being moved
+   - Preserves total electron number
+   - Includes proper fermionic signs for electron reordering
+
+3. **Diagonalization**:
+   - The resulting Coulomb Hamiltonian is diagonal in the Fock basis
+   - No quantum superpositions are created between different sites
+   - The Coulomb interaction only affects state energies based on occupation numbers
+
+### Important Implementation Notes
+
+1. **Hamiltonian Structure**:
+   - The many-body Hamiltonian is constructed separately for each charge sector
+   - For charge=1 sector with 3 single-particle states, we see a 3x3 matrix
+   - The matrix is diagonal because Coulomb interaction preserves occupation numbers
+   - Example from debug output:
+     ```
+     DEBUG: construct_manybody_eigenstates() ham:
+     [[-10. +0.j   0. +0.j   0. +0.j]
+      [  0. +0.j -10. +0.j   0. +0.j]
+      [  0. +0.j   0. +0.j -33.6+0.j]]
+     ```
+
+2. **Diagonalization Process**:
+   - While `diagonalise()` is called, it's effectively a no-op when there's no hopping
+   - The eigenvectors are trivial (identity matrix) because:
+     - No hopping terms between sites (preserves locality)
+     - Coulomb interaction only shifts energies based on occupations
+     - No mechanism to create superpositions between different Fock states
+
+3. **Physical Interpretation**:
+   - Coulomb interaction U affects energies but not wavefunctions
+   - No bonding/anti-bonding states are created
+   - States remain localized because interaction depends only on occupation numbers
+   - Phase relationships between sites are not affected
+
+The implementation can be found in:
+- Main function: `construct_ham_coulomb()` in `qmeq/qdot.py`
+- Called by: `construct_manybody_eigenstates()` in same file
+- Debug output shows the diagonal nature of the resulting matrix
+
 ## System Setup and Initialization
 
 1. **Builder Class**
