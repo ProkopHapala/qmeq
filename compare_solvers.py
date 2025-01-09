@@ -4,6 +4,7 @@ import numpy as np
 from sys import path
 path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
 import qmeq
+import traceback
 
 # setup numpy print options to infinite line length
 np.set_printoptions(linewidth=256, suppress=True)
@@ -72,10 +73,18 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print( "######################################################################" )
         print( "######################################################################" )
         print( "\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
-        system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
-        system.appr.verbosity = verbosity  # Set verbosity after instance creation
-        system.verbosity = verbosity
-        system.solve()
+        
+        try:
+            system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
+            system.appr.verbosity = verbosity  # Set verbosity after instance creation
+            system.verbosity = verbosity
+            system.solve()
+
+        except Exception as e:
+            #make full stack trace
+            print(f"Error in QmeQ solver: {e}")
+            traceback.print_exc()
+
         qmeq_res = {
             'current': system.current[1],
             'energies': system.Ea,
@@ -108,16 +117,16 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
                             for i in range(NStates)])
         print("DEBUG: Energies:", energies)
         print("DEBUG: States:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
-        tunneling_amplitudes = calculate_tunneling_amplitudes(  NLeads, NStates, NSingle, VS, VT, coeffT )
+        #tunneling_amplitudes = calculate_tunneling_amplitudes(  NLeads, NStates, NSingle, VS, VT, coeffT )
+        tunneling_amplitudes = calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads)
         #print("DEBUG: compare_solvers.py tunneling amplitudes before C++ (in file compare_solvers.py):")
         #print(tunneling_amplitudes)
         #exit() # DEBUG - don ot remove this until we are sure our tunneling amplitudes are correct (same as those from qmeq pauli.py)
 
-        
         lead_mu              = np.array([muS, muT + VBias])
         lead_temp            = np.array([Temp, Temp])
         lead_gamma           = np.array([GammaS, GammaT])
-        pauli                = PauliSolver()
+        pauli                = PauliSolver( verbosity=verbosity )
         solver               = pauli.create_solver(   NStates, NLeads, energies, tunneling_amplitudes,  lead_mu, lead_temp, lead_gamma, verbosity)
         pauli.solve(solver)
         kernel               = pauli.get_kernel(solver, NStates)

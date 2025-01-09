@@ -31,6 +31,7 @@ Key components in `leadstun.py`:
    - Initial tunneling amplitudes are calculated in Fock basis
    - Can be rotated to eigenstate basis using `rotate_Tba` function
    - Rotation uses eigenvectors from quantum dot Hamiltonian diagonalization
+   - If the single-particle Hamiltonian is diagonal (no hopping between sites), the eigenvectors are an identity matrix and the rotation is effectively a no-op, so it can be omitted.
 
 ### Important Functions
 

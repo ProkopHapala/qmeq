@@ -22,18 +22,68 @@ struct LeadParams {
 struct SolverParams {
     int nstates;  // Number of states
     int nleads;   // Number of leads
-    std::vector<double> energies;  // State energies
-    std::vector<LeadParams> leads; // Lead parameters
-    std::vector<std::vector<std::vector<double>>> coupling; // Coupling matrix elements
+    double* energies;  // State energies [nstates]
+    LeadParams* leads; // Lead parameters [nleads]
+    double* coupling;  // Coupling matrix elements [nleads * nstates * nstates]
+    
+    // Constructor
+    SolverParams() : energies(nullptr), leads(nullptr), coupling(nullptr) {}
+    
+    // Copy constructor
+    SolverParams(const SolverParams& other) {
+        nstates = other.nstates;
+        nleads = other.nleads;
+        
+        // Deep copy arrays
+        energies = new double[nstates];
+        leads = new LeadParams[nleads];
+        coupling = new double[nleads * nstates * nstates];
+        
+        std::memcpy(energies, other.energies, nstates * sizeof(double));
+        std::memcpy(leads, other.leads, nleads * sizeof(LeadParams));
+        std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
+    }
+    
+    // Destructor
+    ~SolverParams() {
+        delete[] energies;
+        delete[] leads;
+        delete[] coupling;
+    }
+    
+    // Assignment operator
+    SolverParams& operator=(const SolverParams& other) {
+        if (this != &other) {
+            delete[] energies;
+            delete[] leads;
+            delete[] coupling;
+            
+            nstates = other.nstates;
+            nleads = other.nleads;
+            
+            energies = new double[nstates];
+            leads = new LeadParams[nleads];
+            coupling = new double[nleads * nstates * nstates];
+            
+            std::memcpy(energies, other.energies, nstates * sizeof(double));
+            std::memcpy(leads, other.leads, nleads * sizeof(LeadParams));
+            std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
+        }
+        return *this;
+    }
+    
+    // Disable move constructor and assignment
+    SolverParams(SolverParams&&) = delete;
+    SolverParams& operator=(SolverParams&&) = delete;
 };
 
 class PauliSolver {
 public:
     SolverParams params;
-    double* kernel;         // Kernel matrix
-    double* rhs;           // Right-hand side vector
-    double* probabilities; // State probabilities
-    double* pauli_factors; // Pauli factors for transitions
+    double* kernel;         // Kernel matrix [nstates * nstates]
+    double* rhs;           // Right-hand side vector [nstates]
+    double* probabilities; // State probabilities [nstates]
+    double* pauli_factors; // Pauli factors for transitions [nleads * nstates * nstates * 2]
     int verbosity;        // Verbosity level for debugging
     std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
 
@@ -77,7 +127,7 @@ public:
         if(verbosity > 0) {
             print_vector(states_by_charge, "DEBUG: C++ states_by_charge");
             printf("\nDEBUG: C++ coupling matrix elements in  PauliSolver::init_states_by_charge():\n");
-            print_3d_array(&params.coupling[0][0][0], params.nleads, n, n, "C++ coupling matrix elements");
+            print_3d_array(params.coupling, params.nleads, n, n, "Lead ");
         }
     }
 
@@ -85,37 +135,28 @@ public:
     void generate_fct() {
         if(verbosity > 0) {
             printf("\nDEBUG: C++ inputs:\n");
-            print_vector(params.energies.data(), params.nstates, "State energies (E)");
+            print_vector(params.energies, params.nstates, "State energies (E)");
             
             printf("\nTunneling amplitudes (Tba) (in file pauli_solver.hpp):\n");
             for(int l = 0; l < params.nleads; l++) {
-                printf("Tunneling amplitudes for Lead %d:\n", l);
-                std::vector<double> temp(params.nstates * params.nstates);
-                for(int i = 0; i < params.nstates; i++) {
-                    for(int j = 0; j < params.nstates; j++) {
-                        temp[i * params.nstates + j] = params.coupling[l][i][j];
-                    }
-                }
-                print_matrix(temp.data(), params.nstates, params.nstates);
+                printf("Lead %d:\n", l);
+                print_matrix(&params.coupling[l * params.nstates * params.nstates], 
+                           params.nstates, params.nstates);
             }
             
             std::vector<double> mu_vec(params.nleads);
-            for(int l = 0; l < params.nleads; l++) {
-                mu_vec[l] = params.leads[l].mu;
-            }
-            print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
-            
             std::vector<double> temp_vec(params.nleads);
             for(int l = 0; l < params.nleads; l++) {
+                mu_vec[l] = params.leads[l].mu;
                 temp_vec[l] = params.leads[l].temp;
             }
+            print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
             print_vector(temp_vec.data(), params.nleads, "Temperatures (temp)");
             
             print_vector(states_by_charge, "States by charge");
         }
         
-
-        exit(0); // DEBUG - We will keep this here until we are sure the leads tunelling amplitudes are correctly pased over the interface
+        //exit(0); // DEBUG - We will keep this here until we are sure the leads tunelling amplitudes are correctly pased over the interface
 
         if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
         
@@ -144,11 +185,12 @@ public:
                         int changed_site = get_changed_site(c, b);
                         
                         // Calculate coupling strength
-                        double coupling = params.coupling[l][b][c] * params.coupling[l][c][b];
+                        double coupling_val = params.coupling[l * params.nstates * params.nstates + b * params.nstates + c] * 
+                                            params.coupling[l * params.nstates * params.nstates + c * params.nstates + b];
                         
                         // Apply position-dependent coupling for tip (lead 1)
                         if (l == 1 && changed_site > 0) {  // For tip and sites 1,2
-                            coupling *= 0.09;  // (coeffT * coeffT) = 0.3 * 0.3
+                            coupling_val *= 0.09;  // (coeffT * coeffT) = 0.3 * 0.3
                         }
                         
                         // Include lead parameters
@@ -157,27 +199,25 @@ public:
                         
                         // Store factors for both directions
                         // Note: Python's func_pauli multiplies by 2π and coupling already includes gamma/π
-                        pauli_factors[idx + 0] = coupling * fermi * 2 * PI;         // Forward
-                        pauli_factors[idx + 1] = coupling * (1.0 - fermi) * 2 * PI; // Backward
+                        pauli_factors[idx + 0] = coupling_val * fermi * 2 * PI;         // Forward
+                        pauli_factors[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI; // Backward
                         
-                        if(verbosity > 0) printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
-                            l, c, b, energy_diff, coupling, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
+                        if(verbosity > 0) printf("DEBUG: generate_fct() l: %d i: %d j: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f , %.6f ]\n",   l, c, b, energy_diff, coupling_val, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
                     }
                 }
             }
         }
         
-        if(verbosity > 0) {
-            printf("\nDEBUG: Pauli factors:\n");
-            for(int l = 0; l < params.nleads; l++) {
-                printf("Lead %d:\n", l);
-                for(int dir = 0; dir < 2; dir++) {
-                    printf("Direction %d:\n", dir);
-                    print_matrix(&pauli_factors[l * params.nstates * params.nstates * 2 + dir], 
-                               params.nstates, params.nstates);
-                }
-            }
-        }
+        // if(verbosity > 0) {
+        //     printf("\nDEBUG: Pauli factors:\n");
+        //     for(int l = 0; l < params.nleads; l++) {
+        //         printf("Lead %d:\n", l);
+        //         for(int dir = 0; dir < 2; dir++) {
+        //             printf("Direction %d:\n", dir);
+        //             print_matrix(&pauli_factors[l * params.nstates * params.nstates * 2 + dir], params.nstates, params.nstates);
+        //         }
+        //     }
+        // }
         
     }
 
@@ -220,11 +260,10 @@ public:
         // Set diagonal term
         kernel[state * n + state] = diagonal;
         
-        if(verbosity > 0) {
-            printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n", 
-                state, diagonal);
-            print_matrix(kernel, n, n, "Phase 2 - After processing state");
-        }
+        // if(verbosity > 0) {
+        //     printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n", state, diagonal);
+        //     print_matrix(kernel, n, n, "Phase 2 - After processing state");
+        // }
     }
 
     // Generate kernel matrix
@@ -284,6 +323,7 @@ public:
         rhs = new double[n];
         probabilities = new double[n];
         pauli_factors = new double[params.nleads * n * n * 2];
+        printf("DEBUG: PauliSolve() DONE verbosity=%i \n", verbosity);
     }
 
     ~PauliSolver() {

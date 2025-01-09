@@ -47,7 +47,7 @@ class ApproachPauli(Approach):
         Make factors used for generating Pauli master equation kernel.
         """
         if self.verbosity > 0:
-            print("\nDEBUG: generate_fct() Calculating Pauli factors...")
+            print("\nDEBUG: generate_fct() in pauli.py")
             print("\nDEBUG: QmeQ inputs:")
             print(f"State energies (E):", self.qd.Ea)
             #print(f"Tunneling amplitudes (Tba):", self.leads.Tba)
@@ -58,6 +58,8 @@ class ApproachPauli(Approach):
             print(f"Band parameters (dlst):", self.leads.dlst)
             print(f"Number of charge states:", self.si.ncharge)
             print(f"States by charge (statesdm):", self.si.statesdm)
+        
+        raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
             
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst

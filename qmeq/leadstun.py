@@ -144,11 +144,11 @@ def rotate_Tba(Tba0, vecslst, si, indexing=None, mtype=complex):
         nleads by nmany by nmany numpy array containing many-body tunneling amplitudes.
         The returned Tba corresponds to the quantum dot eigenbasis.
     """
-    print("\nDEBUG: rotate_Tba() - Starting basis rotation")
-    print("DEBUG: Initial tunneling amplitudes (Fock basis):")
-    for lead in range(Tba0.shape[0]):
-        print(f"\nLead {lead}:")
-        print(Tba0[lead])
+    #print("\nDEBUG: rotate_Tba() in ", __file__ )
+    # print("DEBUG: Initial tunneling amplitudes (Fock basis):")
+    # for lead in range(Tba0.shape[0]):
+    #     print(f"\nLead {lead}:")
+    #     print(Tba0[lead])
     
     if indexing is None:
         indexing = si.indexing
@@ -216,10 +216,10 @@ def rotate_Tba(Tba0, vecslst, si, indexing=None, mtype=complex):
                                              np.dot(Tba0[l, i1:i2][:, i3:i4],
                                                     vecslst[charge+1]))
             Tba[l, i3:i4][:, i1:i2] = Tba[l, i1:i2][:, i3:i4].conj().T
-    print("\nDEBUG: Final tunneling amplitudes (eigenstate basis):")
-    for lead in range(Tba.shape[0]):
-        print(f"\nLead {lead}:")
-        print(Tba[lead])
+    # print("\nDEBUG: Final tunneling amplitudes (eigenstate basis):")
+    # for lead in range(Tba.shape[0]):
+    #     print(f"\nLead {lead}:")
+    #     print(Tba[lead])
     return Tba
 # ---------------------------------------------------------------------------------------------------
 

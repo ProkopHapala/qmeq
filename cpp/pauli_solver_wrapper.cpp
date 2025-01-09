@@ -13,35 +13,35 @@ void* create_pauli_solver(int nstates, int nleads,
     params.nstates = nstates;
     params.nleads = nleads;
     
-    // Copy energies
-    params.energies.resize(nstates);
-    std::copy(energies, energies + nstates, params.energies.begin());
+    // Allocate and copy energies
+    params.energies = new double[nstates];
+    std::memcpy(params.energies, energies, nstates * sizeof(double));
     
-    // Set up leads
-    params.leads.resize(nleads);
+    // Allocate and set up leads
+    params.leads = new LeadParams[nleads];
     for(int i = 0; i < nleads; i++) {
         params.leads[i].mu = lead_mu[i];
         params.leads[i].temp = lead_temp[i];
         params.leads[i].gamma = lead_gamma[i];
     }
     
-    // Set up coupling matrix
-    params.coupling.resize(nleads);
+    // Allocate and copy coupling matrix elements
+    params.coupling = new double[nleads * nstates * nstates];
     for(int l = 0; l < nleads; l++) {
-        params.coupling[l].resize(nstates);
         for(int i = 0; i < nstates; i++) {
-            params.coupling[l][i].resize(nstates);
             for(int j = 0; j < nstates; j++) {
-                params.coupling[l][i][j] = tunneling_amplitudes[l * nstates * nstates + i * nstates + j];
+                // Match Python's memory layout
+                int idx = (l * nstates + j) * nstates + i;
+                params.coupling[l * nstates * nstates + i * nstates + j] = tunneling_amplitudes[idx];
             }
         }
     }
     
     // Debug print tunneling amplitudes
-    if(verbosity > 0) {
-        printf("DEBUG: tunneling amplitudes after conversion ( in file pauli_solver_wrapper.cpp ):\n");
-        print_3d_array(tunneling_amplitudes, nleads, nstates, nstates, "Tuneling amplitudes for Lead ");
-    }
+    // if(verbosity > 0) {
+    //     printf("DEBUG: tunneling amplitudes after conversion ( in file pauli_solver_wrapper.cpp ):\n");
+    //     print_3d_array(tunneling_amplitudes, nleads, nstates, nstates, "Tuneling amplitudes for Lead ");
+    // }
     
     PauliSolver* solver = new PauliSolver(params, verbosity);
     

@@ -42,6 +42,7 @@ class PauliSolver:
         
         self.lib.delete_pauli_solver.argtypes = [ctypes.c_void_p]
         self.lib.delete_pauli_solver.restype  = None
+        print("PauliSolver::_setup_function_signatures() DONE")
     
     def create_solver(self, nstates, nleads, energies, tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity=0):
         """Create a new PauliSolver instance
@@ -61,13 +62,13 @@ class PauliSolver:
         # Ensure arrays are C-contiguous and in the correct format
         energies = np.ascontiguousarray(energies, dtype=np.float64)
         tunneling_amplitudes = np.ascontiguousarray(tunneling_amplitudes.transpose(0, 2, 1), dtype=np.float64)
-        lead_mu = np.ascontiguousarray(lead_mu, dtype=np.float64)
-        lead_temp = np.ascontiguousarray(lead_temp, dtype=np.float64)
+        lead_mu    = np.ascontiguousarray(lead_mu,    dtype=np.float64)
+        lead_temp  = np.ascontiguousarray(lead_temp,  dtype=np.float64)
         lead_gamma = np.ascontiguousarray(lead_gamma, dtype=np.float64)
         
-        if self.verbosity > 0:
-            print("\nDEBUG: pauli_solver_lib.py tunneling amplitudes before C++ (after transpose):")
-            print(tunneling_amplitudes)
+        #if self.verbosity > 0:
+        #    print("\nDEBUG: pauli_solver_lib.py tunneling amplitudes before C++ (after transpose):")
+        #    print(tunneling_amplitudes)
         
         # Create solver
         solver = self.lib.create_pauli_solver(
@@ -185,7 +186,60 @@ def is_valid_transition(state1, state2, site):
                 return False
     return True
 
-def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
+def calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads):
+    """Calculate tunneling amplitudes between states using TLeads dictionary format
+    
+    Args:
+        NLeads (int): Number of leads
+        NStates (int): Number of states 
+        NSingle (int): Number of single-particle states
+        TLeads (dict): Dictionary with format {(lead,state): amplitude} defining tunneling amplitudes
+        
+    Returns:
+        np.ndarray: Tunneling amplitudes (nleads, nstates, nstates)
+    """
+    tunneling_amplitudes = np.zeros((NLeads, NStates, NStates))
+    
+    # First, group states by charge number for debugging
+    states_by_charge = [[] for _ in range(NSingle + 1)]
+    for i in range(NStates):
+        binary = format(i, f'0{NSingle}b')
+        charge = sum(int(bit) for bit in binary)
+        states_by_charge[charge].append(i)
+        
+    # Iterate over all many-body states
+    for j1 in range(NStates):
+        state = [int(x) for x in format(j1, f'0{NSingle}b')]
+        
+        # Iterate over all single-particle states
+        for j2 in range(NSingle):
+            # Calculate fermion sign for added/removed electron
+            fsign = np.power(-1, sum(state[0:j2]))
+            
+            # For each lead
+            for lead in range(NLeads):
+                if (lead, j2) in TLeads:
+                    tamp = TLeads[(lead, j2)]
+                    
+                    if state[j2] == 0:  # Can add an electron
+                        statep = list(state)
+                        statep[j2] = 1
+                        ind = int(''.join(map(str, statep)), 2)
+                        tunneling_amplitudes[lead, ind, j1] = fsign * tamp
+                    else:  # Can remove an electron
+                        statep = list(state)
+                        statep[j2] = 0
+                        ind = int(''.join(map(str, statep)), 2)
+                        tunneling_amplitudes[lead, ind, j1] = fsign * np.conj(tamp)
+
+    #print("\nDEBUG: Final tunneling amplitudes matrix in PauliSolver::calculate_tunneling_amplitudes() of pauli_solver_lib.py :")
+    #for lead in range(NLeads):
+    #    print(f"\nLead {lead}:")
+    #    print(tunneling_amplitudes[lead])
+
+    return tunneling_amplitudes
+
+def calculate_tunneling_amplitudes_old(nleads, nstates, nsingle, vs, vt, coeff_t):
     """Calculate tunneling amplitudes between states
     
     Args:
@@ -233,7 +287,8 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
                 v = vs if lead == 0 else vt
                 # For tip, coupling depends on which site changes
                 if lead == 1:  # Tip
-                    coeff = 1.0 if j2 == nsingle-1 else coeff_t
+                    # Apply coeff_t to all sites except the last one
+                    coeff = coeff_t if j2 < nsingle-1 else 1.0
                     tamp = v * coeff
                 else:  # Substrate
                     tamp = v
@@ -255,8 +310,8 @@ def calculate_tunneling_amplitudes(nleads, nstates, nsingle, vs, vt, coeff_t):
                     # Add tunneling amplitude (final_state, initial_state)
                     tunneling_amplitudes[lead, ind, j1] = fsign * np.conj(tamp)
     
-    print("\nDEBUG: Final tunneling amplitudes matrix in PauliSolver::calculate_tunneling_amplitudes() of pauli_solver_lib.py :")
-    for lead in range(nleads):
-        print(f"\nLead {lead}:")
-        print(tunneling_amplitudes[lead])
+    #print("\nDEBUG: Final tunneling amplitudes matrix in PauliSolver::calculate_tunneling_amplitudes() of pauli_solver_lib.py :")
+    #for lead in range(nleads):
+    #    print(f"\nLead {lead}:")
+    #    print(tunneling_amplitudes[lead])
     return tunneling_amplitudes
