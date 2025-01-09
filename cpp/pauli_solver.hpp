@@ -133,41 +133,37 @@ public:
 
     // Generate Pauli factors for transitions between states
     void generate_fct() {
-        if(verbosity > 0) {
-            printf("\nDEBUG: C++ inputs:\n");
-            print_vector(params.energies, params.nstates, "State energies (E)");
-            
-            printf("\nTunneling amplitudes (Tba) (in file pauli_solver.hpp):\n");
-            for(int l = 0; l < params.nleads; l++) {
-                printf("Lead %d:\n", l);
-                print_matrix(&params.coupling[l * params.nstates * params.nstates], 
-                           params.nstates, params.nstates);
-            }
-            
-            std::vector<double> mu_vec(params.nleads);
-            std::vector<double> temp_vec(params.nleads);
-            for(int l = 0; l < params.nleads; l++) {
-                mu_vec[l] = params.leads[l].mu;
-                temp_vec[l] = params.leads[l].temp;
-            }
-            print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
-            print_vector(temp_vec.data(), params.nleads, "Temperatures (temp)");
-            
-            print_vector(states_by_charge, "States by charge");
-        }
-        
+
+        // if(verbosity > 0) {
+        //     printf("\nDEBUG: C++ inputs:\n");
+        //     print_vector(params.energies, params.nstates, "State energies (E)");
+        //     printf("\nTunneling amplitudes (Tba) (in file pauli_solver.hpp):\n");
+        //     for(int l = 0; l < params.nleads; l++) {
+        //         printf("Lead %d:\n", l);
+        //         print_matrix(&params.coupling[l * params.nstates * params.nstates], params.nstates, params.nstates);
+        //     }
+        //     std::vector<double> mu_vec(params.nleads);
+        //     std::vector<double> temp_vec(params.nleads);
+        //     for(int l = 0; l < params.nleads; l++) {
+        //         mu_vec[l] = params.leads[l].mu;
+        //         temp_vec[l] = params.leads[l].temp;
+        //     }
+        //     print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
+        //     print_vector(temp_vec.data(), params.nleads, "Temperatures (temp)");
+        //     print_vector(states_by_charge, "States by charge");
+        // }
         //exit(0); // DEBUG - We will keep this here until we are sure the leads tunelling amplitudes are correctly pased over the interface
 
-        if(verbosity > 0) printf("\nDEBUG: generate_fct() Calculating Pauli factors...\n");
+        if(verbosity > 0) printf( "\nDEBUG: PauliSolver::%s %s \n", __func__, __FILE__);
         
-        const int n = params.nstates;
+        const int n  = params.nstates;
+        const int n2 = n * n;
         memset(pauli_factors, 0, params.nleads * n * n * 2 * sizeof(double));
         
         // Make sure states are organized by charge
-        if(states_by_charge.empty()) {
-            init_states_by_charge();
-        }
+        if(states_by_charge.empty()) {   init_states_by_charge();}
         
+        if(verbosity > 0) printf( "\nDEBUG: PauliSolver::%s %s \n", __func__, __FILE__);
         // Iterate through charge states (like Python's implementation)
         for(int charge = 0; charge < states_by_charge.size() - 1; charge++) {
             int next_charge = charge + 1;
@@ -179,20 +175,16 @@ public:
                     
                     // For each lead
                     for(int l = 0; l < params.nleads; l++) {
-                        const int idx = l * n * n * 2 + c * n * 2 + b * 2;
+                        const int idx = l * n2 * 2 + c * n * 2 + b * 2;
                         
                         // Get the site that changed in this transition
                         int changed_site = get_changed_site(c, b);
                         
                         // Calculate coupling strength
-                        double coupling_val = params.coupling[l * params.nstates * params.nstates + b * params.nstates + c] * 
-                                            params.coupling[l * params.nstates * params.nstates + c * params.nstates + b];
-                        
-                        // Apply position-dependent coupling for tip (lead 1)
-                        if (l == 1 && changed_site > 0) {  // For tip and sites 1,2
-                            coupling_val *= 0.09;  // (coeffT * coeffT) = 0.3 * 0.3
-                        }
-                        
+                        double tij =  params.coupling[l * n2 + b * n + c];
+                        double tji =  params.coupling[l * n2 + c * n + b];
+                        double coupling_val = tij * tji; 
+                                            
                         // Include lead parameters
                         const LeadParams& lead = params.leads[l];
                         double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
@@ -202,11 +194,18 @@ public:
                         pauli_factors[idx + 0] = coupling_val * fermi * 2 * PI;         // Forward
                         pauli_factors[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI; // Backward
                         
-                        if(verbosity > 0) printf("DEBUG: generate_fct() l: %d i: %d j: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f , %.6f ]\n",   l, c, b, energy_diff, coupling_val, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
+                        if(verbosity > 0){
+                            //if( (l==1) && (c==3) && (b==1) ){
+                            //    printf("DEBUG: generate_fct() l: %d i: %d j: %d E_diff: %.6f coupling: %.6f tij: %.6f tji: %.6f fermi: %.6f factors:[ %.6f , %.6f ]\n",   l, c, b, energy_diff, coupling_val, tij, tji, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
+                            //}
+                            printf("DEBUG: generate_fct() l: %d i: %d j: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f , %.6f ]\n",   l, c, b, energy_diff, coupling_val, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
+                        }
                     }
                 }
             }
         }
+
+        //exit(0); // DEBUG - We will keep this here until we are sure the generate_fct() does the same as in reference
         
         // if(verbosity > 0) {
         //     printf("\nDEBUG: Pauli factors:\n");

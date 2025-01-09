@@ -47,7 +47,7 @@ class ApproachPauli(Approach):
         Make factors used for generating Pauli master equation kernel.
         """
         if self.verbosity > 0:
-            print("\nDEBUG: generate_fct() in pauli.py")
+            print("\nDEBUG: ApproachPauli::generate_fct() in ", __file__)
             print("\nDEBUG: QmeQ inputs:")
             print(f"State energies (E):", self.qd.Ea)
             #print(f"Tunneling amplitudes (Tba):", self.leads.Tba)
@@ -58,8 +58,10 @@ class ApproachPauli(Approach):
             print(f"Band parameters (dlst):", self.leads.dlst)
             print(f"Number of charge states:", self.si.ncharge)
             print(f"States by charge (statesdm):", self.si.statesdm)
+
+            print("\nDEBUG: ApproachPauli::generate_fct() in ", __file__)
         
-        raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
+        #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
             
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
@@ -79,7 +81,11 @@ class ApproachPauli(Approach):
                     paulifct[l, cb, 0] = xcb*rez[0]  # Forward
                     paulifct[l, cb, 1] = xcb*rez[1]  # Backward
                     if self.verbosity > 0:
+                        #if( (l==1) and (c==3) and (b==1) ):
+                        #    print(f"DEBUG: generate_fct() l: {l} i: {c} j: {b} E_diff: {Ecb:.6f} coupling: {xcb:.6f} Tba[l,b,c]: {Tba[l,b,c]} Tba[l,c,b]: {Tba[l,c,b]}  fermi: {rez[0]/(2*np.pi):.6f} factors:[ {paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f} ]")
                         print(f"DEBUG: generate_fct() l:{l} i:{c} j:{b} E_diff:{Ecb:.6f} coupling:{xcb:.6f} fermi:{rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
+
+        #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
 
     def generate_kern(self):
         """
@@ -149,6 +155,8 @@ class ApproachPauli(Approach):
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
             if self.verbosity > 0:
                 print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
+
+        print(f"DEBUG: generate_coupling_terms() in {__file__}, kh.kern:\n", kh.kern)
 
 
     def generate_current(self):

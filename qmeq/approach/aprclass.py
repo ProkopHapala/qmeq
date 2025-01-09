@@ -308,7 +308,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        debug_print("DEBUG: Approach.solve_kern()")
+        print( f"########### DEBUG: Approach.solve in {__file__}_kern()")
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -317,6 +317,8 @@ class Approach(object):
 
         kern = self.kern
         bvec = self.bvec
+
+        print( f"############# DEBUG: Approach.solve in {__file__}_kern() 2 ")
 
         # Replace one equation by the normalisation condition
         if symq:
@@ -327,8 +329,8 @@ class Approach(object):
             kern[-1] = self.norm_vec
             bvec[-1] = 1
 
-        print("DEBUG: Approach.solve_kern() kern:\n", kern)
-        print("DEBUG: Approach.solve_kern() bvec:\n", bvec)
+        print( "DEBUG: -- Approach.solve_kern() kern:\n", kern)
+        print( "DEBUG: -- Approach.solve_kern() bvec:\n", bvec)
 
         # Try to solve the master equation
         try:
@@ -340,8 +342,8 @@ class Approach(object):
             self.phi0[:] = self.sol0[0]
             self.success = True
 
-            print("DEBUG: Approach.solve_kern() sol0:\n", self.sol0)
-            print("DEBUG: Approach.solve_kern() phi0:\n", self.phi0)
+            print("DEBUG: -- Approach.solve_kern() sol0:\n", self.sol0)
+            print("DEBUG: -- Approach.solve_kern() phi0:\n", self.phi0)
 
 
         except Exception as exept:
