@@ -5,13 +5,13 @@
 #include <cstdio>
 
 // Print matrix in numpy style
-inline void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr) {
-    if(label) printf("%s", label);
+inline void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr, const char* fmt = "%g") {
+    if(label) printf("%s\n", label);
     printf("[");
     for(int i = 0; i < rows; i++) {
         printf("[");
         for(int j = 0; j < cols; j++) {
-            printf("%.6f", mat[i * cols + j]);
+            printf(fmt, mat[i * cols + j]);
             if(j < cols-1) printf(" ");
         }
         printf("]");

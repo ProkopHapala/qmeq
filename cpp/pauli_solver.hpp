@@ -274,14 +274,13 @@ public:
             kernel[state * n + other] = fctm;  // Off-diagonal term
             
             if(verbosity > 0) {
-                printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n", 
-                       state, other, fctp);
+                printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n",  state, other, fctp);
             }
         }
         
         if(verbosity > 0) {
             printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n", state, kernel[bb]);
-            print_matrix(kernel, n, n, "Phase 2 - After processing state");
+            //print_matrix(kernel, n, n, "Phase 2 - After processing state");
         }
     }
 
