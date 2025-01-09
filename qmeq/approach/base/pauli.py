@@ -136,8 +136,12 @@ class ApproachPauli(Approach):
         for a in statesdm[acharge]:
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
+            if self.verbosity > 0:
+                print(f"DEBUG: Lower: state:{b} other:{a} aa:{aa} ba:{ba}")
             fctm, fctp = 0, 0
             for l in range(nleads):
+                if self.verbosity > 0:
+                    print(f"DEBUG:   lead:{l} idx:{l},{ba}")
                 fctm -= paulifct[l, ba, 1]  # Electron leaving
                 fctp += paulifct[l, ba, 0]  # Electron entering
             kh.set_matrix_element_pauli(fctm, fctp, bb, aa)
@@ -148,16 +152,20 @@ class ApproachPauli(Approach):
         for c in statesdm[ccharge]:
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
+            if self.verbosity > 0:
+                print(f"DEBUG: Higher: state:{b} other:{c} cc:{cc} cb:{cb}")
             fctm, fctp = 0, 0
             for l in range(nleads):
+                if self.verbosity > 0:
+                    print(f"DEBUG:   lead:{l} idx:{l},{cb}")
                 fctm -= paulifct[l, cb, 0]  # Electron entering
                 fctp += paulifct[l, cb, 1]  # Electron leaving
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
             if self.verbosity > 0:
                 print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
 
-        print(f"DEBUG: generate_coupling_terms() in {__file__}, kh.kern:\n", kh.kern)
-
+        if self.verbosity > 0:
+            print(f"DEBUG: generate_coupling_terms() in {__file__}, kh.kern:\n", kh.kern)
 
     def generate_current(self):
         """
