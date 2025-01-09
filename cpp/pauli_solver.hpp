@@ -226,20 +226,31 @@ public:
         
         const int n = params.nstates;
         int state_elec = count_electrons(state);
-        double diagonal = 0.0;
+        const int bb = state * n + state;  // Diagonal index for current state
         
         // Handle transitions from lower charge states (a → b)
         for(int other = 0; other < n; other++) {
             int other_elec = count_electrons(other);
             if(other_elec != state_elec - 1) continue;  // Only from lower charge states
             
-            double rate = 0.0;
+            const int aa = other * n + other;  // Diagonal index for other state
+            double fctm = 0.0, fctp = 0.0;
+            
             for(int l = 0; l < params.nleads; l++) {
-                int idx = l * n * n * 2 + other * n * 2 + state * 2;
-                rate += pauli_factors[idx + 0];  // Electron entering
+                int idx = l * n * n * 2 + state * n * 2 + other * 2;
+                fctm -= pauli_factors[idx + 1];  // Electron leaving
+                fctp += pauli_factors[idx + 0];  // Electron entering
             }
-            kernel[other * n + state] = rate;  // Off-diagonal term
-            diagonal -= rate;  // Add to diagonal term
+            
+            // Set matrix elements like in Python
+            kernel[bb] += fctm;  // Diagonal term for current state
+            kernel[aa] += fctp;  // Diagonal term for other state
+            kernel[other * n + state] = fctp;  // Off-diagonal term
+            kernel[state * n + other] = fctm;  // Off-diagonal term
+            
+            // if(verbosity > 0) {
+            //     printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n",  state, other, fctp);
+            // }
         }
         
         // Handle transitions to higher charge states (b → c)
@@ -247,22 +258,31 @@ public:
             int other_elec = count_electrons(other);
             if(other_elec != state_elec + 1) continue;  // Only to higher charge states
             
-            double rate = 0.0;
+            const int cc = other * n + other;  // Diagonal index for other state
+            double fctm = 0.0, fctp = 0.0;
+            
             for(int l = 0; l < params.nleads; l++) {
                 int idx = l * n * n * 2 + other * n * 2 + state * 2;
-                rate += pauli_factors[idx + 1];  // Electron leaving
+                fctm -= pauli_factors[idx + 0];  // Electron entering
+                fctp += pauli_factors[idx + 1];  // Electron leaving
             }
-            kernel[other * n + state] = rate;  // Off-diagonal term
-            diagonal -= rate;  // Add to diagonal term
+            
+            // Set matrix elements like in Python
+            kernel[bb] += fctm;  // Diagonal term for current state
+            kernel[cc] += fctp;  // Diagonal term for other state
+            kernel[other * n + state] = fctp;  // Off-diagonal term
+            kernel[state * n + other] = fctm;  // Off-diagonal term
+            
+            if(verbosity > 0) {
+                printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n", 
+                       state, other, fctp);
+            }
         }
         
-        // Set diagonal term
-        kernel[state * n + state] = diagonal;
-        
-        // if(verbosity > 0) {
-        //     printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n", state, diagonal);
-        //     print_matrix(kernel, n, n, "Phase 2 - After processing state");
-        // }
+        if(verbosity > 0) {
+            printf("DEBUG: generate_coupling_terms() state:%d diagonal:%.6f\n", state, kernel[bb]);
+            print_matrix(kernel, n, n, "Phase 2 - After processing state");
+        }
     }
 
     // Generate kernel matrix
