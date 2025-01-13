@@ -110,6 +110,7 @@ public:
 
     // Initialize states by charge number
     void init_states_by_charge() {
+        printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
         const int n = params.nstates;
         int max_charge = 0;
         // Find maximum charge number
@@ -125,7 +126,8 @@ public:
         }
 
         if(verbosity > 0) {
-            print_vector(states_by_charge, "DEBUG: C++ states_by_charge");
+            printf("\nDEBUG: init_states_by_charge() states_by_charge: \n");
+            print_vector_of_vectors(states_by_charge );
             printf("\nDEBUG: C++ coupling matrix elements in  PauliSolver::init_states_by_charge():\n");
             print_3d_array(params.coupling, params.nleads, n, n, "Lead ");
         }
@@ -161,7 +163,7 @@ public:
         memset(pauli_factors, 0, params.nleads * n * n * 2 * sizeof(double));
         
         // Make sure states are organized by charge
-        if(states_by_charge.empty()) {   init_states_by_charge();}
+        if(states_by_charge.empty()) { init_states_by_charge();}
         
         if(verbosity > 0) printf( "\nDEBUG: PauliSolver::%s %s \n", __func__, __FILE__);
         // Iterate through charge states (like Python's implementation)
@@ -220,85 +222,62 @@ public:
         
     }
 
-    // Generate coupling terms for a specific state
-    void generate_coupling_terms(int state) {
-        if(verbosity > 0) printf("\nDEBUG: generate_coupling_terms() state:%d elec:%d\n", state, count_electrons(state));
-        
+    /// @brief Adds a real value (fctp) to the matrix element connecting the states bb and aa in the Pauli kernel. 
+    /// In addition, adds another real value (fctm) to the diagonal element kern[bb, bb].
+    /// @param fctm Value to be added to the diagonal element kern[bb, bb].
+    /// @param fctp Value to be added to the matrix element connecting states bb and aa.
+    /// @param bb Index of the first state.
+    /// @param aa Index of the second state.
+    /// @note Modifies the internal kernel matrix.
+    void set_matrix_element_pauli(double fctm, double fctp, int bb, int aa) {
+        kernel[bb, bb] += fctm; // diagonal
+        kernel[bb, aa] += fctp; // off-diagonal
+    }
+
+    void generate_coupling_terms(int b) {
+        //if(verbosity > 0){ printf("#\n ======== generate_coupling_terms() b: %i \n", b ); }
         const int n = params.nstates;
-        int state_elec = count_electrons(state);
-        const int bb = state * n + state;  // Diagonal index for current state
-        
-        if(verbosity > 0) printf("DEBUG: Matrix size n=%d, bb(state diagonal)=%d\n", n, bb);
-        
-        // Handle transitions from lower charge states (a → b)
-        for(int other = 0; other < n; other++) {
-            int other_elec = count_electrons(other);
-            if(other_elec != state_elec - 1) continue;  // Only from lower charge states
-            
-            const int aa = other * n + other;  // Diagonal index for other state
-            double fctm = 0.0, fctp = 0.0;
-            
-            if(verbosity > 0) {
-                printf("DEBUG: Lower: state:%d other:%d aa:%d\n", state, other, aa);
-            }
-            
-            for(int l = 0; l < params.nleads; l++) {
-                // Match generate_fct indexing: idx = l * n2 * 2 + c * n * 2 + b * 2
-                int idx = l * n * n * 2 + state * n * 2 + other * 2;
-                if(verbosity > 0) {
-                    printf("DEBUG:   lead:%d idx:%d\n", l, idx);
+        int Q = count_electrons(b);
+        const int bb = b * n + b;
+
+        if(verbosity > 0){  printf("#\n ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
+
+        int n2 = n * n;
+
+        if( Q>0 ){
+            int Qlower=Q-1;
+            // if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); printf("\n"); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            // Handle transitions from lower charge states (a -> b)
+            for (int a : states_by_charge[Qlower]) {
+                if (get_changed_site(b, a) == -1) continue;
+                
+                double fctm = 0.0, fctp = 0.0;
+                for (int l = 0; l < params.nleads; l++) {
+                    int idx = l * n2 * 2 + b * n * 2 + a * 2;
+                    fctm -= pauli_factors[idx + 1];
+                    fctp += pauli_factors[idx + 0];
                 }
-                fctm -= pauli_factors[idx + 1];  // Electron leaving
-                fctp += pauli_factors[idx + 0];  // Electron entering
-            }
-            
-            // Set matrix elements like in Python
-            kernel[bb] += fctm;  // Diagonal term for current state
-            kernel[aa] += fctp;  // Diagonal term for other state
-            kernel[other * n + state] = -fctp;  // Off-diagonal term
-            kernel[state * n + other] = -fctm;  // Off-diagonal term
-            
-            if(verbosity > 0) {
-                printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n", state, other, fctp);
+                if(verbosity > 0){ printf("LOWER [%i,%i] fctm: %.6f fctp: %.6f\n", b, a, fctm, fctp); }
+                set_matrix_element_pauli(fctm, fctp, bb, a * n + a);
             }
         }
-        
-        // Handle transitions to higher charge states (b → c)
-        for(int other = 0; other < n; other++) {
-            int other_elec = count_electrons(other);
-            if(other_elec != state_elec + 1) continue;  // Only to higher charge states
-            
-            const int cc = other * n + other;  // Diagonal index for other state
-            double fctm = 0.0, fctp = 0.0;
-            
-            if(verbosity > 0) {
-                printf("DEBUG: Higher: state:%d other:%d cc:%d\n", state, other, cc);
-            }
-            
-            for(int l = 0; l < params.nleads; l++) {
-                // Match generate_fct indexing: idx = l * n2 * 2 + c * n * 2 + b * 2
-                int idx = l * n * n * 2 + other * n * 2 + state * 2;
-                if(verbosity > 0) {
-                    printf("DEBUG:   lead:%d idx:%d\n", l, idx);
+
+        // Handle transitions to higher charge states (b -> c) 
+        if( Q<states_by_charge.size()-1 ){
+            int Qhigher=Q+1;
+            // if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
+            for (int c : states_by_charge[Qhigher]) {
+                if (get_changed_site(b, c) == -1) continue;
+                
+                double fctm = 0.0, fctp = 0.0;
+                for (int l = 0; l < params.nleads; l++) {
+                    int idx = l * n2 * 2 + c * n * 2 + b * 2;
+                    fctm -= pauli_factors[idx + 0];
+                    fctp += pauli_factors[idx + 1];
                 }
-                fctm -= pauli_factors[idx + 0];  // Electron entering
-                fctp += pauli_factors[idx + 1];  // Electron leaving
+                if(verbosity > 0){ printf("HIGHER [%i,%i] fctm: %.6f fctp: %.6f\n", b, c, fctm, fctp); }
+                set_matrix_element_pauli( fctm, fctp, bb, c * n + c);
             }
-            
-            // Set matrix elements like in Python
-            kernel[bb] += fctm;  // Diagonal term for current state
-            kernel[cc] += fctp;  // Diagonal term for other state
-            kernel[other * n + state] = -fctp;  // Off-diagonal term
-            kernel[state * n + other] = -fctm;  // Off-diagonal term
-            
-            if(verbosity > 0) {
-                printf("DEBUG: generate_coupling_terms() state:%d other:%d rate:%.6f\n", state, other, fctp);
-            }
-        }
-        
-        if(verbosity > 0) {
-            printf("DEBUG: After state %d, kernel matrix:\n", state);
-            print_matrix(kernel, n, n, nullptr, "%.3f");
         }
     }
 

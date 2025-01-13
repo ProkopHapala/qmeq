@@ -4,39 +4,39 @@
 #include <vector>
 #include <cstdio>
 
+inline void print_vector(const double* vec, int n, const char* fmt = "%g ") {
+    printf("[ "); 
+    for(int j = 0; j < n; j++) { printf(fmt, vec[j]); }
+    printf("]\n"); 
+}
+
+inline void print_vector(const int* vec, int n, const char* fmt = "%i ") {
+    printf("[ "); 
+    for(int j = 0; j < n; j++) { printf(fmt, vec[j]); }
+    printf("],"); 
+}
+
 // Print matrix in numpy style
-inline void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr, const char* fmt = "%g") {
+inline void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr, const char* fmt = "%g ") {
     if(label) printf("%s\n", label);
     printf("[");
     for(int i = 0; i < rows; i++) {
-        printf("[");
-        for(int j = 0; j < cols; j++) {
-            printf(fmt, mat[i * cols + j]);
-            if(j < cols-1) printf(" ");
-        }
-        printf("]");
-        if(i < rows-1) printf("\n ");
+        print_vector( mat+i*cols, cols, fmt);
     }
     printf("]\n");
 }
 
 // Print vector as nx1 matrix
-inline void print_vector(const double* vec, int size, const char* label = nullptr) {
-    print_matrix(vec, size, 1, label);
-}
+// inline void print_vector(const double* vec, int size, const char* label = nullptr) {
+//     print_matrix(vec, size, 1, label);
+// }
 
 // Print vector of vectors as matrix
-inline void print_vector(const std::vector<std::vector<int>>& vec, const char* label = nullptr) {
-    if(label) printf("%s", label);
+inline void print_vector_of_vectors(const std::vector<std::vector<int>>& vec, const char* fmt = "%i " ) {
+    //if(label) printf("%s", label);
     printf("[");
     for(int i = 0; i < vec.size(); i++) {
-        printf("[");
-        for(int j = 0; j < vec[i].size(); j++) {
-            printf("%d", vec[i][j]);
-            if (j < vec[i].size()-1) printf(" ");
-        }
-        printf("]");
-        if (i < vec.size()-1) printf("\n ");
+        print_vector( vec[i].data(), vec[i].size(), fmt);
     }
     printf("]\n");
 }

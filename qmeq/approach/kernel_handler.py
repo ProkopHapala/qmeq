@@ -128,8 +128,8 @@ class KernelHandler(object):
         self.kern : ndarray
             (modifies) the kernel
         """
-        self.kern[bb, bb] += fctm
-        self.kern[bb, aa] += fctp
+        self.kern[bb, bb] += fctm   # diagonal
+        self.kern[bb, aa] += fctp   # off-diagonal
 
     def get_phi0_element(self, b, bp, bcharge):
         r""" Gets the entry of the density matrix given by :math:`|b><bp|`.

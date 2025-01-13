@@ -96,6 +96,8 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print("QmeQ states:", [bin(i)[2:].zfill(NSingle) for i in range(2**NSingle)])
         print("QmeQ energies:", system.Ea)
 
+        #exit()
+
     # Run C++ solver
     if bRunCpp:
         print( "\n\n######################################################################" )
