@@ -81,18 +81,35 @@ struct SolverParams {
 class PauliSolver {
 public:
     SolverParams params;
-    double* kernel;         // Kernel matrix [nstates * nstates]
+    //int nstates;         // Number of states
+    double* kernel;        // Kernel matrix [nstates * nstates]
     double* rhs;           // Right-hand side vector [nstates]
     double* probabilities; // State probabilities [nstates]
     double* pauli_factors; // Pauli factors for transitions [nleads * nstates * nstates * 2]
+    double* pauli_factors_compact;  // [nleads][ndm1][2]
+    int ndm1;                       // Number of valid transitions (states differing by 1 charge)
     int verbosity;        // Verbosity level for debugging
     std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
     std::vector<int> state_order;      // Maps original index -> ordered index
     std::vector<int> state_order_inv;  // Maps ordered index -> original index
 
+    // from indexing.py of QmeQ
+    std::vector<int> lenlst;     // Number of states in each charge sector
+    std::vector<int> dictdm;      // State enumeration within charge sectors
+    std::vector<int> shiftlst0;  // Cumulative offsets
+    std::vector<int> shiftlst1;  // Cumulative offsets
+    std::vector<int> mapdm0;      // State pair mapping
+
     // Count number of electrons in a state
     int count_electrons(int state) {
         return __builtin_popcount(state);
+    }
+
+    void count_valid_transitions() {
+        ndm1 = 0;
+        for(int charge = 0; charge < states_by_charge.size()-1; charge++) {
+            ndm1 += states_by_charge[charge+1].size() * states_by_charge[charge].size();
+        }
     }
 
     // Get the site that changed in a transition between two states
@@ -135,6 +152,46 @@ public:
     //         print_3d_array(params.coupling, params.nleads, n, n, "Lead ");
     //     }
     // }
+
+    // Initialize these in init_states_by_charge()
+    void init_indexing_maps() {
+        const int n = params.nstates;
+        lenlst.resize(states_by_charge.size());
+        dictdm.resize(n);
+        shiftlst0.resize(states_by_charge.size() + 1, 0);
+        
+        // Fill the mapping arrays following QmeQ's logic
+        for(int charge = 0; charge < states_by_charge.size(); charge++) {
+            lenlst   [charge]   = states_by_charge[charge].size();
+            shiftlst0[charge+1] = shiftlst0[charge] + lenlst[charge] * lenlst[charge];
+            
+            int counter = 0;
+            for(int state : states_by_charge[charge]) {
+                dictdm[state] = counter++;
+            }
+        }
+
+        // Initialize map_dm0
+        int total_pairs = shiftlst0.back();  // Total number of possible state pairs
+        mapdm0.resize(total_pairs);
+        // Fill map_dm0 following QmeQ's logic
+        for(int charge = 0; charge < states_by_charge.size(); charge++) {
+            for(int b : states_by_charge[charge]) {
+                for(int bp : states_by_charge[charge]) {
+                    int idx = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
+                    mapdm0[idx] = idx;  // For now, identity mapping. Add symmetry handling later
+                }
+            }
+        }
+
+        if(verbosity > 0) {
+            printf("DEBUG: init_indexing_maps() len_list:    \n"); print_vector(lenlst);
+            printf("DEBUG: init_indexing_maps() dict_dm:     \n"); print_vector(dictdm);
+            printf("DEBUG: init_indexing_maps() shift_list0: \n"); print_vector(shiftlst0);
+            printf("DEBUG: init_indexing_maps() shift_list1: \n"); print_vector(shiftlst1);
+            printf("DEBUG: init_indexing_maps() map_dm0:     \n"); print_vector(mapdm0);
+        }
+    }
 
     void init_state_ordering() {
         const int n = params.nstates;
@@ -179,6 +236,7 @@ public:
         }
 
         init_state_ordering();
+        init_indexing_maps();
 
         if(verbosity > 0) {
             printf("\nDEBUG: init_states_by_charge() states_by_charge: \n");
@@ -186,29 +244,40 @@ public:
         }
     }
 
+    void generate_fct_compact() {
+        const int n = params.nstates;
+        count_valid_transitions();
+        pauli_factors_compact = new double[params.nleads * ndm1 * 2]();   // Allocate compact array
+        
+        // Iterate through charge states
+        for(int charge = 0; charge < states_by_charge.size()-1; charge++) {
+            int next_charge = charge + 1;
+            for(int c : states_by_charge[next_charge]) {
+                for(int b : states_by_charge[charge]) {
+                    int cb = get_ind_dm1(c, b, charge);  // Get compact index
+                    double energy_diff = params.energies[c] - params.energies[b];
+                    
+                    for(int l = 0; l < params.nleads; l++) {
+                        // Calculate coupling
+                        double tij = params.coupling[l * n * n + b * n + c];
+                        double tji = params.coupling[l * n * n + c * n + b];
+                        double coupling_val = tij * tji;
+                        
+                        // Calculate Fermi factor
+                        const LeadParams& lead = params.leads[l];
+                        double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
+                        
+                        // Store in compact format
+                        pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 0] = coupling_val * fermi * 2 * PI;
+                        pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 1] = coupling_val * (1.0 - fermi) * 2 * PI;
+                    }
+                }
+            }
+        }
+    }
+
     // Generate Pauli factors for transitions between states
     void generate_fct() {
-
-        // if(verbosity > 0) {
-        //     printf("\nDEBUG: C++ inputs:\n");
-        //     print_vector(params.energies, params.nstates, "State energies (E)");
-        //     printf("\nTunneling amplitudes (Tba) (in file pauli_solver.hpp):\n");
-        //     for(int l = 0; l < params.nleads; l++) {
-        //         printf("Lead %d:\n", l);
-        //         print_matrix(&params.coupling[l * params.nstates * params.nstates], params.nstates, params.nstates);
-        //     }
-        //     std::vector<double> mu_vec(params.nleads);
-        //     std::vector<double> temp_vec(params.nleads);
-        //     for(int l = 0; l < params.nleads; l++) {
-        //         mu_vec[l] = params.leads[l].mu;
-        //         temp_vec[l] = params.leads[l].temp;
-        //     }
-        //     print_vector(mu_vec.data(), params.nleads, "Chemical potentials (mu)");
-        //     print_vector(temp_vec.data(), params.nleads, "Temperatures (temp)");
-        //     print_vector(states_by_charge, "States by charge");
-        // }
-        //exit(0); // DEBUG - We will keep this here until we are sure the leads tunelling amplitudes are correctly pased over the interface
-
         if(verbosity > 0) printf( "\nDEBUG: PauliSolver::%s %s \n", __func__, __FILE__);
         
         const int n  = params.nstates;
@@ -259,20 +328,20 @@ public:
                 }
             }
         }
+        
+    }
 
-        //exit(0); // DEBUG - We will keep this here until we are sure the generate_fct() does the same as in reference
-        
-        // if(verbosity > 0) {
-        //     printf("\nDEBUG: Pauli factors:\n");
-        //     for(int l = 0; l < params.nleads; l++) {
-        //         printf("Lead %d:\n", l);
-        //         for(int dir = 0; dir < 2; dir++) {
-        //             printf("Direction %d:\n", dir);
-        //             print_matrix(&pauli_factors[l * params.nstates * params.nstates * 2 + dir], params.nstates, params.nstates);
-        //         }
-        //     }
-        // }
-        
+    int get_ind_dm0(int b, int bp, int charge) {
+        //if( maptype==1 ){ return map_dm0[idx]} 
+        int idx = lenlst[charge]*dictdm[b] + dictdm[bp] + shiftlst0[charge];
+        return mapdm0[ idx ];
+        //return len_list[charge] * dict_dm[b] + dict_dm[bp] + shift_list0[charge]; 
+    }
+
+    int get_ind_dm1(int c, int b, int bcharge) { // For transitions between states with charge difference of 1
+        //int ccharge = bcharge + 1;
+        //return len_list[ccharge] * dict_dm[c] + dict_dm[b] + shift_list0[bcharge];
+        return lenlst[bcharge]*dictdm[c] + dictdm[b] + shiftlst1[bcharge];
     }
 
     /// @brief Adds a real value (fctp) to the matrix element connecting the states bb and aa in the Pauli kernel. 
@@ -283,15 +352,20 @@ public:
     /// @param aa Index of the second state.
     /// @note Modifies the internal kernel matrix.
     void set_matrix_element_pauli(double fctm, double fctp, int bb, int aa) {
-        kernel[bb, bb] += fctm; // diagonal
-        kernel[bb, aa] += fctp; // off-diagonal
+        int n = params.nstates;
+        kernel[bb*n+bb] += fctm; // diagonal
+        kernel[bb*n+aa] += fctp; // off-diagonal
     }
+
+    inline int index_paulifct        (int l, int i, int j){ return 2*( j + params.nstates*( i + l*params.nstates )); }
+    inline int index_paulifct_compact(int l, int i       ){ return 2*( i + ndm1*l); }
 
     void generate_coupling_terms(int b) {
         //if(verbosity > 0){ printf("#\n ======== generate_coupling_terms() b: %i \n", b ); }
         const int n = params.nstates;
         int Q = count_electrons(b);
-        const int bb = b * n + b;
+        //const int bb = b * n + b;
+        const int bb = b;
 
         if(verbosity > 0){  printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
 
@@ -303,15 +377,22 @@ public:
             
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
+
+                int aa = a; // Original
+                //int aa = get_ind_dm0(a, a, Qlower);
+                //int ba = get_ind_dm1(b, a, Qlower);
                 
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
-                    int idx = l * n2 * 2 + b * n * 2 + a * 2;
+                    //int idx = l * n2 * 2 + b * n * 2 + a * 2;
+                    int idx = index_paulifct( l, b, a);
                     fctm -= pauli_factors[idx + 1];
                     fctp += pauli_factors[idx + 0];
                 }
-                if(verbosity > 0){ printf("LOWER [%i,%i] fctm: %.6f fctp: %.6f\n", b, a, fctm, fctp); }
-                set_matrix_element_pauli(fctm, fctp, bb, a * n + a);
+                //int aa = a * n + a;
+                
+                if(verbosity > 0){ printf("LOWER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, a, fctm, fctp, bb, aa); }
+                set_matrix_element_pauli(fctm, fctp, bb, aa );
             }
         }        
         if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
@@ -319,15 +400,82 @@ public:
             if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
-                
+
+                int cc = c;
+                //int cc = si.get_ind_dm0(c, c, Qhigher );
+                //int cb = si.get_ind_dm1(c, b, Q       );
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
-                    int idx = l * n2 * 2 + c * n * 2 + b * 2;
+                    //int idx = l * n2 * 2 + c * n * 2 + b * 2;
+                    int idx = index_paulifct( l, c, b );
                     fctm -= pauli_factors[idx + 0];
                     fctp += pauli_factors[idx + 1];
                 }
-                if(verbosity > 0){ printf("HIGHER [%i,%i] fctm: %.6f fctp: %.6f\n", b, c, fctm, fctp); }
-                set_matrix_element_pauli( fctm, fctp, bb, c * n + c);
+                //int cc = c * n + c;
+                
+                if(verbosity > 0){ printf("HIGHER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, c, fctm, fctp, bb, cc); }
+                set_matrix_element_pauli( fctm, fctp, bb, cc );
+            }
+        }
+        //if(verbosity > 0) { printf( "generate_coupling_terms() b: %i kernel: \n", b ); print_matrix(kernel, n, n); }
+
+    }
+
+    void generate_coupling_terms_compact(int b) {
+        //if(verbosity > 0){ printf("#\n ======== generate_coupling_terms() b: %i \n", b ); }
+        const int n = params.nstates;
+        int Q = count_electrons(b);
+        //const int bb = b * n + b;
+        const int bb = b;
+
+        if(verbosity > 0){  printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
+
+        int n2 = n * n;
+
+        if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
+            int Qlower=Q-1;
+            if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); printf("\n"); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            
+            for (int a : states_by_charge[Qlower]) {
+                //if (get_changed_site(b, a) == -1) continue;
+
+                //int aa = a; // Original
+                int aa = get_ind_dm0(a, a, Qlower);
+                int ba = get_ind_dm1(b, a, Qlower);
+                
+                double fctm = 0.0, fctp = 0.0;
+                for (int l = 0; l < params.nleads; l++) {
+                    //int idx = l * n2 * 2 + b * n * 2 + a * 2;
+                    int idx = index_paulifct_compact( l, ba );
+                    fctm -= pauli_factors_compact[idx + 1];
+                    fctp += pauli_factors_compact[idx + 0];
+                }
+                //int aa = a * n + a;
+                
+                if(verbosity > 0){ printf("LOWER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, a, fctm, fctp, bb, aa); }
+                set_matrix_element_pauli(fctm, fctp, bb, aa );
+            }
+        }        
+        if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
+            int Qhigher=Q+1;
+            if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
+            for (int c : states_by_charge[Qhigher]) {
+                //if (get_changed_site(b, c) == -1) continue;
+
+                //int cc = c;
+                int cc = get_ind_dm0(c, c, Qhigher );
+                int cb = get_ind_dm1(c, b, Q       );
+                double fctm = 0.0, fctp = 0.0;
+                for (int l = 0; l < params.nleads; l++) {
+                    //int idx = l * n2 * 2 + c * n * 2 + b * 2;
+                    int idx = index_paulifct_compact( l, cb );
+                    fctm -= pauli_factors_compact[idx + 0];
+                    fctp += pauli_factors_compact[idx + 1];
+                }
+                //int cc = c * n + c;
+                
+                if(verbosity > 0){ printf("HIGHER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, c, fctm, fctp, bb, cc); }
+                set_matrix_element_pauli( fctm, fctp, bb, cc );
             }
         }
         //if(verbosity > 0) { printf( "generate_coupling_terms() b: %i kernel: \n", b ); print_matrix(kernel, n, n); }

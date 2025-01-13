@@ -15,6 +15,7 @@ inline void print_vector(const int* vec, int n, const char* fmt = "%i ") {
     for(int j = 0; j < n; j++) { printf(fmt, vec[j]); }
     printf("],"); 
 }
+inline void print_vector( const std::vector<int>& vec, const char* fmt = "%i ") { print_vector( vec.data(), vec.size(), fmt); }
 
 // Print matrix in numpy style
 inline void print_matrix(const double* mat, int rows, int cols, const char* fmt = "%g ") {
@@ -32,9 +33,7 @@ inline void print_matrix(const double* mat, int rows, int cols, const char* fmt 
 inline void print_vector_of_vectors(const std::vector<std::vector<int>>& vec, const char* fmt = "%i " ) {
     //if(label) printf("%s", label);
     printf("[");
-    for(int i = 0; i < vec.size(); i++) {
-        print_vector( vec[i].data(), vec[i].size(), fmt);
-    }
+    for(int i = 0; i < vec.size(); i++) { print_vector( vec[i] ); }
     printf("]\n");
 }
 

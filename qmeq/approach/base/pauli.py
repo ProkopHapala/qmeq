@@ -109,7 +109,12 @@ class ApproachPauli(Approach):
         #if self.verbosity > 0:print("DEBUG: ApproachPauli.generate_kern() after generate_fct() kh.kern:\n", kh.kern)
         #exit(0)
 
-        if self.verbosity > 0:  print(f"DEBUG generate_kern(): paulifct:{ self.paulifct }")
+        if self.verbosity > 0:  
+            print(f"DEBUG generate_kern(): paulifct:{ self.paulifct }")
+            print("DEBUG: generate_kern() lenlst    ", self.si.lenlst )
+            print("DEBUG: generate_kern() dictdm    ", self.si.dictdm )
+            print("DEBUG: generate_kern() shiftlst0 ", self.si.shiftlst0)
+            print("DEBUG: generate_kern() mapdm0    ", self.si.mapdm0 )
 
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:
@@ -148,7 +153,7 @@ class ApproachPauli(Approach):
                 #if self.verbosity > 0:  print(f"DEBUG:   lead:{l} idx:{l},{ba}")
                 fctm -= paulifct[l, ba, 1]  # Electron leaving
                 fctp += paulifct[l, ba, 0]  # Electron entering
-            if(self.verbosity > 0): print("LOWER  [%i,%i] fctm: %.6f fctp: %.6f" %(b, a, fctm, fctp) ); 
+            if(self.verbosity > 0): print("LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, aa)
             #if self.verbosity > 0:   print(f"DEBUG: generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
         
@@ -163,7 +168,7 @@ class ApproachPauli(Approach):
                 #if self.verbosity > 0: print(f"DEBUG:   lead:{l} idx:{l},{cb}")
                 fctm -= paulifct[l, cb, 0]  # Electron entering
                 fctp += paulifct[l, cb, 1]  # Electron leaving
-            if(self.verbosity > 0): print("HIGHER [%i,%i] fctm: %.6f fctp: %.6f" %(b, c, fctm, fctp) ); 
+            if(self.verbosity > 0): print("HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
             #if self.verbosity > 0: print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
 
