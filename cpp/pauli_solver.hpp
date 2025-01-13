@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
 #include <cstring>
 #include <cmath>
 #include "gauss_solver.hpp"
@@ -86,6 +87,8 @@ public:
     double* pauli_factors; // Pauli factors for transitions [nleads * nstates * nstates * 2]
     int verbosity;        // Verbosity level for debugging
     std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
+    std::vector<int> state_order;      // Maps original index -> ordered index
+    std::vector<int> state_order_inv;  // Maps ordered index -> original index
 
     // Count number of electrons in a state
     int count_electrons(int state) {
@@ -109,27 +112,77 @@ public:
     }
 
     // Initialize states by charge number
+    // void init_states_by_charge() {
+    //     printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
+    //     const int n = params.nstates;
+    //     int max_charge = 0;
+    //     // Find maximum charge number
+    //     for(int i = 0; i < n; i++) {
+    //         max_charge = std::max(max_charge, count_electrons(i));
+    //     }
+    //     // Initialize the vector with empty vectors
+    //     states_by_charge.resize(max_charge + 1);
+    //     // Fill in states for each charge
+    //     for(int i = 0; i < n; i++) {
+    //         int charge = count_electrons(i);
+    //         states_by_charge[charge].push_back(i);
+    //     }
+
+    //     if(verbosity > 0) {
+    //         printf("\nDEBUG: init_states_by_charge() states_by_charge: \n");
+    //         print_vector_of_vectors(states_by_charge );
+    //         printf("\nDEBUG: C++ coupling matrix elements in  PauliSolver::init_states_by_charge():\n");
+    //         print_3d_array(params.coupling, params.nleads, n, n, "Lead ");
+    //     }
+    // }
+
+    void init_state_ordering() {
+        const int n = params.nstates;
+        state_order.resize(n);
+        state_order_inv.resize(n);
+        
+        int idx = 0;
+        for(int charge = 0; charge < states_by_charge.size(); charge++) {
+            for(int state : states_by_charge[charge]) {
+                state_order[state] = idx;
+                state_order_inv[idx] = state;
+                idx++;
+            }
+        }
+        
+        if(verbosity > 0) {
+            printf("State ordering map: original -> ordered\n");
+            for(int i = 0; i < n; i++) {   printf("%d -> %d\n", i, state_order[i]);    }
+        }
+    }
+
     void init_states_by_charge() {
         printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
         const int n = params.nstates;
         int max_charge = 0;
-        // Find maximum charge number
+        
+        // First find maximum charge
         for(int i = 0; i < n; i++) {
             max_charge = std::max(max_charge, count_electrons(i));
         }
-        // Initialize the vector with empty vectors
         states_by_charge.resize(max_charge + 1);
-        // Fill in states for each charge
+        
+        // Fill states in order
         for(int i = 0; i < n; i++) {
             int charge = count_electrons(i);
             states_by_charge[charge].push_back(i);
         }
+        
+        // Sort states within each charge sector
+        for(auto& states : states_by_charge) {
+            std::sort(states.begin(), states.end());
+        }
+
+        init_state_ordering();
 
         if(verbosity > 0) {
             printf("\nDEBUG: init_states_by_charge() states_by_charge: \n");
-            print_vector_of_vectors(states_by_charge );
-            printf("\nDEBUG: C++ coupling matrix elements in  PauliSolver::init_states_by_charge():\n");
-            print_3d_array(params.coupling, params.nleads, n, n, "Lead ");
+            print_vector_of_vectors(states_by_charge);
         }
     }
 
@@ -240,16 +293,16 @@ public:
         int Q = count_electrons(b);
         const int bb = b * n + b;
 
-        if(verbosity > 0){  printf("#\n ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
+        if(verbosity > 0){  printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
 
         int n2 = n * n;
 
-        if( Q>0 ){
+        if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
             int Qlower=Q-1;
-            // if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); printf("\n"); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
-            // Handle transitions from lower charge states (a -> b)
+            if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); printf("\n"); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            
             for (int a : states_by_charge[Qlower]) {
-                if (get_changed_site(b, a) == -1) continue;
+                //if (get_changed_site(b, a) == -1) continue;
                 
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
@@ -260,14 +313,12 @@ public:
                 if(verbosity > 0){ printf("LOWER [%i,%i] fctm: %.6f fctp: %.6f\n", b, a, fctm, fctp); }
                 set_matrix_element_pauli(fctm, fctp, bb, a * n + a);
             }
-        }
-
-        // Handle transitions to higher charge states (b -> c) 
-        if( Q<states_by_charge.size()-1 ){
+        }        
+        if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
             int Qhigher=Q+1;
-            // if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
+            if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
             for (int c : states_by_charge[Qhigher]) {
-                if (get_changed_site(b, c) == -1) continue;
+                //if (get_changed_site(b, c) == -1) continue;
                 
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
@@ -279,44 +330,34 @@ public:
                 set_matrix_element_pauli( fctm, fctp, bb, c * n + c);
             }
         }
+        //if(verbosity > 0) { printf( "generate_coupling_terms() b: %i kernel: \n", b ); print_matrix(kernel, n, n); }
+
     }
 
     void normalize_kernel() {
         const int n = params.nstates;
         // Set first row to all ones (like Python)
-        for(int j = 0; j < n; j++) {
-            kernel[j] = 1.0;
-        }
-        
-        if(verbosity > 0) {
-            printf("Phase 2 - After normalization\n");
-            print_matrix(kernel, n, n, nullptr, "%.6g");
-        }
+        for(int j = 0; j < n; j++) { kernel[j] = 1.0; }        
+        // if(verbosity > 0) {
+        //     printf("Phase 2 - After normalization\n");
+        //     print_matrix(kernel, n, n, nullptr, "%.6g");
+        // }
     }
 
     // Generate kernel matrix
     void generate_kern() {
         if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
-        
         const int n = params.nstates;
-        
-        // Calculate Pauli factors first
         generate_fct();
-        
-        // Initialize kernel matrix to zero
         std::fill(kernel, kernel + n * n, 0.0);
-        
-        // Generate coupling terms for each state
-        for(int state = 0; state < n; state++) {
-            generate_coupling_terms(state);
+
+        for(int state = 0; state < n; state++) { 
+            int b = state_order_inv[state];
+            generate_coupling_terms(b); 
         }
-        
-        // Normalize kernel matrix
-        normalize_kernel();
-        
-        if(verbosity > 0) {
-            print_matrix(kernel, n, n, "Phase 2 - After normalization");
-        }
+        if(verbosity > 0) { printf( "generate_kern(): kernel: \n" ); print_matrix(kernel, n, n); }
+        //normalize_kernel();
+        //if(verbosity > 0) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
     }
 
     // Solve the kernel matrix equation

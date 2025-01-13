@@ -17,12 +17,9 @@ inline void print_vector(const int* vec, int n, const char* fmt = "%i ") {
 }
 
 // Print matrix in numpy style
-inline void print_matrix(const double* mat, int rows, int cols, const char* label = nullptr, const char* fmt = "%g ") {
-    if(label) printf("%s\n", label);
+inline void print_matrix(const double* mat, int rows, int cols, const char* fmt = "%g ") {
     printf("[");
-    for(int i = 0; i < rows; i++) {
-        print_vector( mat+i*cols, cols, fmt);
-    }
+    for(int i = 0; i < rows; i++) { print_vector( mat+i*cols, cols, fmt); }
     printf("]\n");
 }
 

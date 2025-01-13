@@ -120,9 +120,10 @@ class ApproachPauli(Approach):
 
     def generate_coupling_terms(self, b, bp, bcharge):
         """Generate coupling terms for the Pauli master equation."""
-        if self.verbosity > 0:  print(f"\nDEBUG: generate_coupling_terms() state b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
+        #if self.verbosity > 0:  print(f"\nDEBUG: generate_coupling_terms() state b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
+        if self.verbosity > 0:  print(f"\nQmeQ pauli.py ======== generate_coupling_terms() state b: {b} Q: {bcharge}")
             
-        debug_print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
+        #debug_print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
         Approach.generate_coupling_terms(self, b, bp, bcharge)
         paulifct = self.paulifct
 
@@ -137,7 +138,7 @@ class ApproachPauli(Approach):
         bb = si.get_ind_dm0(b, b, bcharge)
         
         # Handle transitions from lower charge states
-        #if self.verbosity > 0:  print(f"DEBUG: generate_coupling_terms() from LOWER charge states ")
+        if self.verbosity > 0 and len(statesdm[acharge])>0 :  print(f"generate_coupling_terms() Q-1 states: ", statesdm[acharge] )
         for a in statesdm[acharge]:   # Loop over states with charge acharge = bcharge-1
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
@@ -152,7 +153,7 @@ class ApproachPauli(Approach):
             #if self.verbosity > 0:   print(f"DEBUG: generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
         
         # Handle transitions to higher charge states
-        #if self.verbosity > 0:  print(f"DEBUG: generate_coupling_terms() from HIGHER charge states ")
+        if self.verbosity > 0 and len( statesdm[ccharge])>0 :  print(f"generate_coupling_terms() Q+1 states", statesdm[ccharge] )
         for c in statesdm[ccharge]: # Loop over states with charge ccharge = bcharge+1
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
