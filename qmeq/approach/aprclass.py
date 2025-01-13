@@ -308,7 +308,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        print( f"########### DEBUG: Approach.solve in {__file__}_kern()")
+        print( f"########### DEBUG: Approach.solve_kern()  ", self.funcp.solmethod )
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -317,8 +317,6 @@ class Approach(object):
 
         kern = self.kern
         bvec = self.bvec
-
-        print( f"############# DEBUG: Approach.solve in {__file__}_kern() 2 ")
 
         # Replace one equation by the normalisation condition
         if symq:

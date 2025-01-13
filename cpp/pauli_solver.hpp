@@ -5,12 +5,34 @@
 #include <cstring>
 #include <cmath>
 #include "gauss_solver.hpp"
+#include "iterative_solver.hpp"
 #include "print_utils.hpp"
 
 // Constants should be defined in meV units
 const double PI = 3.14159265358979323846;
 const double HBAR = 0.6582119;  // Reduced Planck constant in meV*ps
 const double KB = 0.08617333;   // Boltzmann constant in meV/K
+
+
+
+template<typename T> void swap( T& a, T& b ) {
+    T tmp = a;
+    a = b;
+    b = tmp;
+};
+
+void swap_matrix_rows(double* mat, int nrows, int ncols, int row1, int row2) {
+    for(int j = 0; j < ncols; j++) {
+        swap(mat[row1 * ncols + j], mat[row2 * ncols + j]);
+    }
+}
+
+void swap_matrix_cols(double* mat, int nrows, int ncols, int col1, int col2) {
+    for(int i = 0; i < nrows; i++) {
+        swap(mat[i * ncols + col1], mat[i * ncols + col2]);
+    }
+}
+
 
 // Lead parameters
 struct LeadParams {
@@ -210,10 +232,19 @@ public:
         int idx = 0;
         for(int charge = 0; charge < states_by_charge.size(); charge++) {
             for(int state : states_by_charge[charge]) {
-                state_order[state] = idx;
-                state_order_inv[idx] = state;
+                state_order[state]   = idx;
+                //state_order_inv[idx] = state;
                 idx++;
             }
+        }
+
+        // HACK - We change 3 and 4 ( for some reason  in QmeQ they are swapped)
+        //swap( state_order[3], state_order[4] );
+
+        idx=0;
+        for(int i: state_order) {
+            state_order_inv[i] = idx;
+            idx++;
         }
         
         if(verbosity > 0) {
@@ -512,6 +543,10 @@ public:
             int b = state_order_inv[state];
             generate_coupling_terms(b); 
         }
+
+        swap_matrix_rows( kernel, n,n, 3, 4);
+        swap_matrix_cols( kernel, n,n, 3, 4);
+
         if(verbosity > 0) { printf( "generate_kern(): kernel: \n" ); print_matrix(kernel, n, n); }
         //normalize_kernel();
         //if(verbosity > 0) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
@@ -524,20 +559,33 @@ public:
         // Create a copy of kernel matrix since solve() modifies it
         double* kern_copy = new double[n * n];
         std::copy(kernel, kernel + n * n, kern_copy);
+
+        std::fill(kern_copy, kern_copy+n, 1.0);
         
         // Set up RHS vector [1, 0, ..., 0]
         double* rhs = new double[n];
         rhs[0] = 1.0;
         std::fill(rhs + 1, rhs + n, 0.0);
+
+        if(verbosity > 0) {
+            printf("DEBUG  solve_kern() kern:\n"); print_matrix( kern_copy, n, n, "%10.5f " );
+            printf("DEBUG  solve_kern() rhs: "); print_vector( rhs, n, "%10.5f " );
+        }
         
         // Solve the system using GaussSolver
-        GaussSolver::solve(kern_copy, rhs, probabilities, n);
+        //GaussSolver::solve(kern_copy, rhs, probabilities, n);
+        //linSolve_gauss( n, kern_copy, rhs, probabilities );
+        linSolve_gauss( n, kern_copy, rhs, probabilities );
+
+        //std::fill( probabilities, probabilities+n, 0.0);
+        //solve_Jacobi( kern_copy, rhs, probabilities, n, 1e-10,  100 ) ;
+
         
         delete[] kern_copy;
         delete[] rhs;
         
         if(verbosity > 0) {
-            print_vector(probabilities, n, "Probabilities after solve");
+            printf("DEBUG  solve_kern() probabilities: ");  print_vector(probabilities, n, "%10.5f " );
         }
     }
 
