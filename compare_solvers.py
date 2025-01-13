@@ -153,33 +153,33 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):
 
     diff = np.max(np.abs(qmeq_res['energies'] - cpp_res['energies']))
     if diff > tol:
-        print("Energies:   diff:", diff)
-        print("QmeQ:", qmeq_res['energies'])
-        print("C++: ", cpp_res['energies'])
+        print("Energies diff :", diff)
+        print("Energies QmeQ :", qmeq_res['energies'])
+        print("Energies C++  :", cpp_res['energies'])
     else:
         print(f"Energies:   OK (diff({diff}) < tol({tol}))")
     
     diff = np.max(np.abs(qmeq_res['probabilities'] - cpp_res['probabilities']))
     if diff > tol:
-        print("Probabilities:   diff:", diff)
-        print("QmeQ:", qmeq_res['probabilities'])
-        print("C++: ", cpp_res['probabilities'])
+        print("Probabilities diff :", diff)
+        print("Probabilities QmeQ :", qmeq_res['probabilities'])
+        print("Probabilities C++  :", cpp_res['probabilities'])
     else:
         print(f"Probabilities:   OK (diff({diff}) < tol({tol}))")
     
     diff = np.max(np.abs(qmeq_res['kernel'] - cpp_res['kernel']))
     if diff > tol:
         print("Kernel:   diff:", diff)
-        print("QmeQ:", qmeq_res['kernel'])
-        print("C++: ", cpp_res['kernel'])
+        print("Kernel QmeQ:\n", qmeq_res['kernel'])
+        print("Kernel C++:\n", cpp_res['kernel'])
     else:
         print(f"Kernel:   OK (diff({diff}) < tol({tol}))")
     
     diff = np.max(np.abs(qmeq_res['current'] - cpp_res['current']))
     if diff > tol:
-        print("Current:   diff:", diff)
-        print("QmeQ:", qmeq_res['current'])
-        print("C++: ", cpp_res['current'])
+        print("Current diff :", diff)
+        print("Current QmeQ :", qmeq_res['current'])
+        print("Current C++  :", cpp_res['current'])
         print("Relative diff:", abs(qmeq_res['current'] - cpp_res['current'])/abs(qmeq_res['current']))
     else:
         print(f"Current:   OK (diff({diff}) < tol({tol}))")

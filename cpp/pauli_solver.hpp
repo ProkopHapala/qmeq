@@ -128,30 +128,45 @@ public:
         return 1.0/(1.0 + exp((energy_diff - mu)/temp));
     }
 
-    // Initialize states by charge number
-    // void init_states_by_charge() {
-    //     printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
-    //     const int n = params.nstates;
-    //     int max_charge = 0;
-    //     // Find maximum charge number
-    //     for(int i = 0; i < n; i++) {
-    //         max_charge = std::max(max_charge, count_electrons(i));
-    //     }
-    //     // Initialize the vector with empty vectors
-    //     states_by_charge.resize(max_charge + 1);
-    //     // Fill in states for each charge
-    //     for(int i = 0; i < n; i++) {
-    //         int charge = count_electrons(i);
-    //         states_by_charge[charge].push_back(i);
-    //     }
+    //inline int get_ind_dm0_0( int i, int iq ){ return dictdm[i] + shiftlst0[iq]; }
+    inline int get_ind_dm0_0( int i, int j, int iq ){ return lenlst[iq]*dictdm[i] + dictdm[j]  + shiftlst0[iq]; }
 
-    //     if(verbosity > 0) {
-    //         printf("\nDEBUG: init_states_by_charge() states_by_charge: \n");
-    //         print_vector_of_vectors(states_by_charge );
-    //         printf("\nDEBUG: C++ coupling matrix elements in  PauliSolver::init_states_by_charge():\n");
-    //         print_3d_array(params.coupling, params.nleads, n, n, "Lead ");
-    //     }
-    // }
+
+    void init_map_dm0() {
+        mapdm0.resize(shiftlst0.back(), -1);
+        int counter = 0;
+        int nq = states_by_charge.size();
+
+        // Diagonal elements
+        for(int iq = 0; iq < nq; iq++) {
+            for(int b : states_by_charge[iq]) {
+                int bbp = get_ind_dm0_0(b, b, iq);
+                if(verbosity > 0) printf("DEBUG set_mapdm() diag b,iq,bbp,counter %d %d %d %d \n", b, iq, bbp, counter);
+                mapdm0[bbp] = counter++;
+            }
+        }
+        //npauli = counter;
+
+        // Off-diagonal elements using combinations
+        for(int iq = 0; iq < nq; iq++) {
+            for(int i = 0; i < states_by_charge[iq].size(); i++) {
+                for(int j = i + 1; j < states_by_charge[iq].size(); j++) {
+                    int b = states_by_charge[iq][i];
+                    int bp = states_by_charge[iq][j];
+                    
+                    int bpb = get_ind_dm0_0(bp, b, iq);
+                    if(verbosity > 0) printf("DEBUG set_mapdm() offdiag b,iq,bbp,counter %d %d %d %d \n", bp, iq, bpb, counter);
+                    mapdm0[bpb] = counter;
+                    
+                    int bbp = get_ind_dm0_0(b, bp, iq);
+                    if(verbosity > 0) printf("DEBUG set_mapdm() offdiag b,iq,bbp,counter %d %d %d %d \n", b, iq, bbp, counter);
+                    mapdm0[bbp] = counter++;
+                }
+            }
+        }
+        //ndm0 = counter;
+        //ndm0r = npauli + 2*(ndm0 - npauli);
+    }
 
     // Initialize these in init_states_by_charge()
     void init_indexing_maps() {
@@ -159,37 +174,31 @@ public:
         lenlst.resize(states_by_charge.size());
         dictdm.resize(n);
         shiftlst0.resize(states_by_charge.size() + 1, 0);
-        
+        shiftlst1.resize(states_by_charge.size()    , 0);
+
+        int nq =  states_by_charge.size();
+        printf("DEBUG 1 \n" );
         // Fill the mapping arrays following QmeQ's logic
-        for(int charge = 0; charge < states_by_charge.size(); charge++) {
-            lenlst   [charge]   = states_by_charge[charge].size();
-            shiftlst0[charge+1] = shiftlst0[charge] + lenlst[charge] * lenlst[charge];
-            
+        for(int iq = 0; iq < nq; iq++) {
+            lenlst   [iq]   = states_by_charge[iq].size();
             int counter = 0;
-            for(int state : states_by_charge[charge]) {
+            for(int state : states_by_charge[iq]) {
                 dictdm[state] = counter++;
             }
         }
+        printf("DEBUG 2 \n" );
+        for(int iq = 0; iq < nq  ; iq++) { shiftlst0[iq+1] = shiftlst0[iq] + lenlst[iq] * lenlst[iq  ]; }
+        printf("DEBUG 2.1 \n" );
+        for(int iq = 0; iq < nq-1; iq++) { shiftlst1[iq+1] = shiftlst1[iq] + lenlst[iq] * lenlst[iq+1]; }
 
-        // Initialize map_dm0
-        int total_pairs = shiftlst0.back();  // Total number of possible state pairs
-        mapdm0.resize(total_pairs);
-        // Fill map_dm0 following QmeQ's logic
-        for(int charge = 0; charge < states_by_charge.size(); charge++) {
-            for(int b : states_by_charge[charge]) {
-                for(int bp : states_by_charge[charge]) {
-                    int idx = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
-                    mapdm0[idx] = idx;  // For now, identity mapping. Add symmetry handling later
-                }
-            }
-        }
+        init_map_dm0();
 
         if(verbosity > 0) {
-            printf("DEBUG: init_indexing_maps() len_list:    \n"); print_vector(lenlst);
-            printf("DEBUG: init_indexing_maps() dict_dm:     \n"); print_vector(dictdm);
-            printf("DEBUG: init_indexing_maps() shift_list0: \n"); print_vector(shiftlst0);
-            printf("DEBUG: init_indexing_maps() shift_list1: \n"); print_vector(shiftlst1);
-            printf("DEBUG: init_indexing_maps() map_dm0:     \n"); print_vector(mapdm0);
+            printf("DEBUG: C++ init_indexing_maps() len_list    : "); print_vector(lenlst);    
+            printf("DEBUG: C++ init_indexing_maps() dict_dm     : "); print_vector(dictdm);   
+            printf("DEBUG: C++ init_indexing_maps() shift_list0 : "); print_vector(shiftlst0); 
+            printf("DEBUG: C++ init_indexing_maps() shift_list1 : "); print_vector(shiftlst1); 
+            printf("DEBUG: C++ init_indexing_maps() map_dm0     : "); print_vector(mapdm0);    
         }
     }
 
@@ -373,7 +382,7 @@ public:
 
         if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
             int Qlower=Q-1;
-            if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); printf("\n"); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
             
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
@@ -397,7 +406,7 @@ public:
         }        
         if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
             int Qhigher=Q+1;
-            if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
+            if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 
@@ -434,7 +443,7 @@ public:
 
         if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
             int Qlower=Q-1;
-            if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); printf("\n"); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            if(verbosity > 0){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
             
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
@@ -458,7 +467,7 @@ public:
         }        
         if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
             int Qhigher=Q+1;
-            if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); printf("\n"); } 
+            if(verbosity > 0){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 

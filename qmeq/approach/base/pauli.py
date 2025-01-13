@@ -110,11 +110,12 @@ class ApproachPauli(Approach):
         #exit(0)
 
         if self.verbosity > 0:  
-            print(f"DEBUG generate_kern(): paulifct:{ self.paulifct }")
-            print("DEBUG: generate_kern() lenlst    ", self.si.lenlst )
-            print("DEBUG: generate_kern() dictdm    ", self.si.dictdm )
-            print("DEBUG: generate_kern() shiftlst0 ", self.si.shiftlst0)
-            print("DEBUG: generate_kern() mapdm0    ", self.si.mapdm0 )
+            print("DEBUG QmeQ generate_kern() paulifct  : \n", self.paulifct )
+            print("DEBUG QmeQ generate_kern() lenlst    : ", self.si.lenlst )
+            print("DEBUG QmeQ generate_kern() dictdm    : ", self.si.dictdm )
+            print("DEBUG QmeQ generate_kern() shiftlst0 : ", self.si.shiftlst0)
+            print("DEBUG QmeQ generate_kern() shiftlst1 : ", self.si.shiftlst1)
+            print("DEBUG QmeQ generate_kern() mapdm0    : ", self.si.mapdm0 )
 
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:

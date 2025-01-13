@@ -738,6 +738,7 @@ class StateIndexingPauli(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
+        print("DEBUG: StateIndexingPauli.set_statesdm()")
         debug_print(f"DEBUG: StateIndexingPauli.set_statesdm() statesdm: {statesdm}")
         self.statesdm = statesdm
         self.statesdm.append([])
@@ -752,6 +753,7 @@ class StateIndexingPauli(StateIndexing):
         """
         Makes dictdm, shiftlst0 for Pauli master equation indexing.
         """
+        print("DEBUG: StateIndexingPauli.set_dictdm()")
         debug_print("DEBUG: StateIndexingPauli.set_dictdm()")
         for j1 in range(self.ncharge):
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])
@@ -765,6 +767,7 @@ class StateIndexingPauli(StateIndexing):
         """
         Reduce the number of diagonal matrix elements by using symmetries.
         """
+        print("DEBUG: StateIndexingPauli.set_mapdm()")
         # noinspection PyShadowingNames
         def add_elem(counter, b, bp, charge, dictq=True):
             bbp = self.get_ind_dm0(b, bp, charge, maptype=0)
@@ -788,10 +791,13 @@ class StateIndexingPauli(StateIndexing):
                         for sz in range(b_sz+2, b_ssq+1, 2):
                             b1 = self.qn_ind[(b_ch,  sz, b_ssq,  b_alpha)]
                             add_elem(counter, b1, b1, charge, dictq=False)
+                        print(  "set_mapdm-ssq ", b, charge, charge, add_elem(counter, b, b, charge) )
                         counter = counter+1
                 else:
+                    print(  "set_mapdm-non-ssq ", b, charge, charge, add_elem(counter, b, b, charge) )
                     counter = add_elem(counter, b, b, charge)
         self.npauli = counter
+        exit(0)
 
     def get_ind_dm0(self, b, bp, charge, maptype=1):
         """
@@ -917,6 +923,7 @@ class StateIndexingDM(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
+        print("DEBUG StateIndexingDM.set_statesdm() ")
         self.statesdm = list(statesdm)
         self.statesdm.append([])
         self.ndm0_, self.ndm1_, self.npauli_ = 0, 0, 0
@@ -933,6 +940,7 @@ class StateIndexingDM(StateIndexing):
         """
         Makes dictdm, shiftlst0, and shiftlst1 necessary for density-matrix element indexing.
         """
+        print("DEBUG StateIndexingDM.set_dictdm() ")
         for j1 in range(self.ncharge):
             self.lenlst[j1] = len(self.statesdm[j1])
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])**2
@@ -945,11 +953,50 @@ class StateIndexingDM(StateIndexing):
                 counter += 1
         self.set_mapdm()
 
+    # def set_mapdm(self):
+    #     """
+    #     Reduce the number of diagonal matrix elements by using symmetries.
+    #     """
+    #     # noinspection PyShadowingNames
+    #     print("DEBUG StateIndexingDM.set_mapdm() indexing:", self.indexing )
+    #     def add_elem(counter, b, bp, charge, dictq=True, conjq=True):
+    #         bbp = self.get_ind_dm0(b, bp, charge, maptype=0)
+    #         print( "b,iq,bbp,counter ", b, charge, bbp, counter );
+    #         self.mapdm0[bbp] = counter
+    #         return counter+1
+    #     #
+    #     self.mapdm0 = np.ones(self.ndm0_, dtype=longnp)*(-1)
+    #     counter = 0
+    #     # Diagonal density matrix elements
+    #     for charge in range(self.ncharge):
+    #         for b in self.statesdm[charge]:
+    #                 print("DEBUG set_mapdm() diag ", end="")
+    #                 counter = add_elem(counter, b, b, charge)
+    #     self.npauli = counter
+    #     # Off-diagonal density matrix elements
+    #     for charge in range(self.ncharge):
+    #         for b, bp in itertools.combinations(self.statesdm[charge], 2):
+    #                 print("DEBUG set_mapdm() offdiag ", end="")
+    #                 add_elem(counter, bp, b, charge, dictq=False, conjq=False)
+    #                 print("DEBUG set_mapdm() offdiag ", end="")
+    #                 counter = add_elem(counter, b, bp, charge)
+    #     self.ndm0 = counter
+    #     self.ndm0r = self.npauli+2*(self.ndm0-self.npauli)
+    #     self.ndm1 = self.ndm1_
+
+    #     print("DEBUG StateIndexingDM.set_mapdm() mapdm0 : ", self.mapdm0 ); 
+    #     print("DEBUG StateIndexingDM.set_mapdm() lenlst    :", self.lenlst    ); 
+    #     print("DEBUG StateIndexingDM.set_mapdm() dictdm    :", self.dictdm    ); 
+    #     print("DEBUG StateIndexingDM.set_mapdm() shiftlst0 :", self.shiftlst0 ); 
+    #     print("DEBUG StateIndexingDM.set_mapdm() shiftlst1 :", self.shiftlst1 ); 
+    #     #raise( Exception("DEBUG StateIndexingDM.set_mapdm() ") )
+
     def set_mapdm(self):
         """
         Reduce the number of diagonal matrix elements by using symmetries.
         """
         # noinspection PyShadowingNames
+        print("DEBUG StateIndexingDM.set_mapdm() indexing:", self.indexing )
         def add_elem(counter, b, bp, charge, dictq=True, conjq=True):
             bbp = self.get_ind_dm0(b, bp, charge, maptype=0)
             self.mapdm0[bbp] = counter
@@ -1005,6 +1052,14 @@ class StateIndexingDM(StateIndexing):
         self.ndm0r = self.npauli+2*(self.ndm0-self.npauli)
         self.ndm1 = self.ndm1_
 
+        print("DEBUG StateIndexingDM.set_mapdm() lenlst    :", self.lenlst    ); 
+        print("DEBUG StateIndexingDM.set_mapdm() dictdm    :", self.dictdm    ); 
+        print("DEBUG StateIndexingDM.set_mapdm() shiftlst0 :", self.shiftlst0 ); 
+        print("DEBUG StateIndexingDM.set_mapdm() shiftlst1 :", self.shiftlst1 ); 
+        print("DEBUG StateIndexingDM.set_mapdm() mapdm0    :", self.mapdm0    ); 
+        #raise( Exception("DEBUG StateIndexingDM.set_mapdm() ") )
+
+
     def get_ind_dm0(self, b, bp, charge, maptype=1):
         """
         Get the index of zeroth order density matrix element.
@@ -1029,8 +1084,7 @@ class StateIndexingDM(StateIndexing):
         # shiftas = self.shiftlst0[charge]
         # print('index is', l*i + j + shiftas)
         if maptype == 0:
-            return (self.lenlst[charge]*self.dictdm[b] + self.dictdm[bp]
-                    + self.shiftlst0[charge])
+            return (self.lenlst[charge]*self.dictdm[b] + self.dictdm[bp]  + self.shiftlst0[charge])
         elif maptype == 1:
             return (self.mapdm0[self.lenlst[charge]*self.dictdm[b] + self.dictdm[bp]
                     + self.shiftlst0[charge]])
@@ -1119,6 +1173,7 @@ class StateIndexingDMc(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
+        print("StateIndexingDMc.set_statesdm()")
         self.statesdm = statesdm
         self.statesdm.append([])
         self.ndm0_, self.ndm1_, self.npauli_ = 0, 0, 0
@@ -1135,6 +1190,7 @@ class StateIndexingDMc(StateIndexing):
         """
         Makes dictdm, shiftlst0, and shiftlst1 necessary for density-matrix element indexing.
         """
+        print("StateIndexingDMc.set_dictdm()")
         for j1 in range(self.ncharge):
             self.lenlst[j1] = len(self.statesdm[j1])
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])**2
@@ -1152,6 +1208,7 @@ class StateIndexingDMc(StateIndexing):
         Reduce the number of diagonal matrix elements by using symmetries.
         """
         # noinspection PyShadowingNames
+        print("StateIndexingDMc.set_mapdm()")
         def add_elem(counter, b, bp, charge, dictq=True):
             bbp = self.get_ind_dm0(b, bp, charge, maptype=0)
             self.mapdm0[bbp] = counter
