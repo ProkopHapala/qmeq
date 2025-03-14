@@ -11,7 +11,7 @@ from ..wrappers.mytypes import complexnp
 from .kernel_handler import KernelHandler
 from .kernel_handler import KernelHandlerMatrixFree
 
-from ..config import debug_print
+from ..config import debug_print, verb_print
 
 class Approach(object):
     """
@@ -308,7 +308,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        print( f"########### DEBUG: Approach.solve_kern()  ", self.funcp.solmethod )
+        verb_print( f"########### DEBUG: Approach.solve_kern()  ", self.funcp.solmethod )
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -327,8 +327,19 @@ class Approach(object):
             kern[-1] = self.norm_vec
             bvec[-1] = 1
 
-        print( "DEBUG: -- Approach.solve_kern() kern:\n", kern)
-        print( "DEBUG: -- Approach.solve_kern() bvec:\n", bvec)
+        #verb_print( "DEBUG: -- Approach.solve_kern() kern:\n", kern)
+        #verb_print( "DEBUG: -- Approach.solve_kern() bvec:\n", bvec)
+        if self.verbosity > 0:  
+            print("DEBUG QmeQ solve_kern() kern:\n", kern)
+            print("DEBUG QmeQ solve_kern() bvec:\n", bvec)
+            
+            # Print with higher precision for comparison with C++
+            print("DEBUG QmeQ modified kernel with high precision:")
+            np.set_printoptions(precision=15)
+            print(kern)
+            print("DEBUG QmeQ RHS vector with high precision:")
+            print(bvec)
+            np.set_printoptions(precision=5)  # Reset to default
 
         # Try to solve the master equation
         try:
@@ -340,8 +351,8 @@ class Approach(object):
             self.phi0[:] = self.sol0[0]
             self.success = True
 
-            print("DEBUG: -- Approach.solve_kern() sol0:\n", self.sol0)
-            print("DEBUG: -- Approach.solve_kern() phi0:\n", self.phi0)
+            verb_print("DEBUG: -- Approach.solve_kern() sol0:\n", self.sol0)
+            verb_print("DEBUG: -- Approach.solve_kern() phi0:\n", self.phi0)
 
 
         except Exception as exept:
@@ -397,7 +408,7 @@ class Approach(object):
         currentq : bool
             Calculate the current.
         """
-        debug_print("DEBUG: Approach.solve()")
+        verb_print("DEBUG: Approach.solve()")
 
         if qdq:
             self.qd.diagonalise()

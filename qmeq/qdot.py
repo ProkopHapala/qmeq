@@ -9,7 +9,7 @@ from .indexing import ssqrange
 from .indexing import sz_to_ind
 from .indexing import ssq_to_ind
 
-from .config import debug_print
+from .config import verb_print, verb_print
 
 
 def construct_ham_coulomb(qd, coulomb, statelst, ham_=None):
@@ -36,7 +36,7 @@ def construct_ham_coulomb(qd, coulomb, statelst, ham_=None):
     ham_coulomb : ndarray
         Matrix representation of many-body Coulomb Hamiltonian in Fock basis for states statelst.
     """
-    debug_print(f"DEBUG: construct_ham_coulomb() statelst: {statelst}")
+    verb_print(f"DEBUG: construct_ham_coulomb() statelst: {statelst}")
     si, mtype = qd.si, qd.mtype
     herm_c, m_less_n = qd.herm_c, qd.m_less_n
     nstates = len(statelst)
@@ -97,7 +97,7 @@ def construct_ham_hopping(qd, hsingle, statelst, ham_=None):
     ham_coulomb : ndarray
         Matrix representation of many-body Hamiltonian in Fock basis for states statelst.
     """
-    debug_print(f"DEBUG: construct_ham_hopping() statelst: {statelst}")
+    verb_print(f"DEBUG: construct_ham_hopping() statelst: {statelst}")
     si, mtype, herm_hs = qd.si, qd.mtype, qd.herm_hs
     nstates = len(statelst)
     if ham_ is not None:
@@ -156,17 +156,17 @@ def construct_manybody_eigenstates(qd, hsingle, coulomb, statelst, ham_=None):
         len(statelst) by len(statelst) array containing eigenvector matrix of Hamiltonian.
         Columns of ham_vecs correspond to particular eigenvectors.
     """
-    debug_print(f"DEBUG: construct_manybody_eigenstates() statelst: {statelst}")
+    verb_print(f"DEBUG: construct_manybody_eigenstates() statelst: {statelst}")
     if ham_ is not None:
         ham = ham_
     else:
         ham_coulomb = construct_ham_coulomb(qd, coulomb, statelst)
         ham_hopping = construct_ham_hopping(qd, hsingle, statelst)
         ham = ham_coulomb + ham_hopping
-    debug_print(f"DEBUG: construct_manybody_eigenstates() ham:\n{ham}")
+    verb_print(f"DEBUG: construct_manybody_eigenstates() ham:\n{ham}")
     ham_vals, ham_vecs = np.linalg.eigh(ham)
-    debug_print(f"DEBUG: construct_manybody_eigenstates() ham_vals: {ham_vals}")
-    debug_print(f"DEBUG: construct_manybody_eigenstates() ham_vecs:\n{ham_vecs}")
+    verb_print(f"DEBUG: construct_manybody_eigenstates() ham_vals: {ham_vals}")
+    verb_print(f"DEBUG: construct_manybody_eigenstates() ham_vecs:\n{ham_vecs}")
     return ham_vals, ham_vecs
 
 
@@ -188,7 +188,7 @@ def construct_Ea_manybody(valslst, si):
     Ea : ndarray
         nmany by 1 array containing eigenvalues of the Hamiltonian.
     """
-    debug_print(f"DEBUG: construct_Ea_manybody() statelst: {valslst}")
+    verb_print(f"DEBUG: construct_Ea_manybody() statelst: {valslst}")
     Ea = np.zeros(si.nmany, dtype=float)
     if si.indexing == 'sz':
         # Iterate over charges
@@ -739,7 +739,7 @@ class QuantumDot(object):
                  herm_hs=True, herm_c=False, m_less_n=True,
                  mtype=float, ham_ssq_q=False):
         """Initialization of the QuantumDot class."""
-        debug_print("DEBUG: QuantumDot.__init__()")
+        verb_print("DEBUG: QuantumDot.__init__()")
         self.si = si
         self.mtype = mtype
         self.ham_ssq_q = ham_ssq_q
@@ -751,7 +751,7 @@ class QuantumDot(object):
         self._init_hamiltonian()
 
     def _init_hamiltonian(self):
-        debug_print("DEBUG: QuantumDot._init_hamiltonian()")
+        verb_print("DEBUG: QuantumDot._init_hamiltonian()")
         si = self.si
         if si.indexing == 'sz':
             self.valslst = empty_szlst(si.nsingle, True)
@@ -897,7 +897,7 @@ class QuantumDot(object):
         ssq : int
             Total spin.
         """
-        debug_print(f"DEBUG: QuantumDot.diagonalise_charge() charge: {charge}  sz: {sz}  ssq: {ssq}")
+        verb_print(f"DEBUG: QuantumDot.diagonalise_charge() charge: {charge}  sz: {sz}  ssq: {ssq}")
         if charge is None:
             return None
         elif sz is None:
@@ -930,35 +930,35 @@ class QuantumDot(object):
 
     def diagonalise(self):
         """Diagonalises Hamiltonians for all charge states."""
-        print("\nDEBUG: QuantumDot.diagonalise() - Starting diagonalization")
-        print("DEBUG: Single-particle Hamiltonian (hsingle):", self.hsingle)
-        print("DEBUG: Coulomb interaction (coulomb):", self.coulomb)
+        verb_print("\nDEBUG: QuantumDot.diagonalise() - Starting diagonalization")
+        verb_print("DEBUG: Single-particle Hamiltonian (hsingle):", self.hsingle)
+        verb_print("DEBUG: Coulomb interaction (coulomb):", self.coulomb)
         
         if self.si.indexing == 'sz':
             for charge in range(self.si.ncharge):
                 for sz in szrange(charge, self.si.nsingle):
-                    print(f"\nDEBUG: Diagonalizing charge={charge}, sz={sz}")
+                    verb_print(f"\nDEBUG: Diagonalizing charge={charge}, sz={sz}")
                     vals, vecs = self.diagonalise_charge(charge, sz)
-                    print(f"DEBUG: Eigenvalues: {vals}")
-                    print(f"DEBUG: Eigenvectors:\n{vecs}")
+                    verb_print(f"DEBUG: Eigenvalues: {vals}")
+                    verb_print(f"DEBUG: Eigenvectors:\n{vecs}")
         elif self.si.indexing == 'ssq':
             for charge in range(self.si.ncharge):
                 szlow = -(charge % 2)
                 szind = sz_to_ind(szlow, charge, self.si.nsingle)
-                print(f"\nDEBUG: Diagonalizing charge={charge} with ssq symmetry")
+                verb_print(f"\nDEBUG: Diagonalizing charge={charge} with ssq symmetry")
                 self.valslst[charge], self.vecslst[charge] = (
                     construct_manybody_eigenstates_ssq_all(self, charge, self.hsingle, self.coulomb,
                                                        self.hamlst[charge][szind]))
-                print(f"DEBUG: Eigenvalues: {self.valslst[charge]}")
-                print(f"DEBUG: Eigenvectors:\n{self.vecslst[charge]}")
+                verb_print(f"DEBUG: Eigenvalues: {self.valslst[charge]}")
+                verb_print(f"DEBUG: Eigenvectors:\n{self.vecslst[charge]}")
         else:
             for charge in range(self.si.ncharge):
-                print(f"\nDEBUG: Diagonalizing charge={charge}")
+                verb_print(f"\nDEBUG: Diagonalizing charge={charge}")
                 vals, vecs = self.diagonalise_charge(charge)
-                print(f"DEBUG: Eigenvalues: {vals}")
-                print(f"DEBUG: Eigenvectors:\n{vecs}")
+                verb_print(f"DEBUG: Eigenvalues: {vals}")
+                verb_print(f"DEBUG: Eigenvectors:\n{vecs}")
         self.set_Ea()
-        print("\nDEBUG: Final state energies (Ea):", self.Ea)
+        verb_print("\nDEBUG: Final state energies (Ea):", self.Ea)
 
     def set_Ea(self):
         """Sets the many-body eigenstates using construct_Ea_manybody()."""

@@ -46,13 +46,13 @@ VT = np.sqrt(GammaT/np.pi)
 
 VBiasMin = 0.0
 VBiasMax = 60.0
-dVBias   = 1.0
+dVBias   = 0.2
 
 
-#bDEBUG = False
-bDEBUG = True
+bDEBUG = False
+#bDEBUG = True
 qmeq.config.DEBUG = bDEBUG
-
+qmeq.verbosity    = 0
 
 
 

@@ -12,7 +12,7 @@ except ImportError:
 from .wrappers.mytypes import boolnp
 from .wrappers.mytypes import longnp
 
-from .config import debug_print
+from .config import debug_print, verb_print
 
 
 def binarylist_to_integer(lst):
@@ -70,28 +70,28 @@ def construct_chargelst(nsingle):
         chargelst[charge] gives a list of state indices for given charge,
         chargelst[charge][ind] gives state index.
     """
-    print("\nDEBUG: QmeQ construct_chargelst() state ordering:")
-    print(f"Number of single particle states (nsingle): {nsingle}")
+    verb_print("\nDEBUG: QmeQ construct_chargelst() state ordering:")
+    verb_print(f"Number of single particle states (nsingle): {nsingle}")
     
     nmany = np.power(2, nsingle)
-    print(f"Total number of many-body states (nmany): {nmany}")
+    verb_print(f"Total number of many-body states (nmany): {nmany}")
     
     chargelst = [[] for _ in range(nsingle+1)]
-    print(f"Created {nsingle+1} empty lists for charges 0 to {nsingle}")
+    verb_print(f"Created {nsingle+1} empty lists for charges 0 to {nsingle}")
     
     # Iterate over many-body states
-    print("\nAssigning states to charge sectors:")
+    verb_print("\nAssigning states to charge sectors:")
     for j1 in range(nmany):
         state = integer_to_binarylist(j1, nsingle)
         charge = sum(state)
         chargelst[charge].append(j1)
-        print(f"State {j1:2d} -> binary {state} -> charge {charge} -> added to chargelst[{charge}]")
+        verb_print(f"State {j1:2d} -> binary {state} -> charge {charge} -> added to chargelst[{charge}]")
     
-    print("\nFinal charge grouping:")
+    verb_print("\nFinal charge grouping:")
     for charge, states in enumerate(chargelst):
         if states:  # Only print non-empty charge sectors
             state_strings = [f"{state:0{nsingle}b}" for state in states]
-            print(f"Charge {charge}: states {states} (binary: {state_strings})")
+            verb_print(f"Charge {charge}: states {states} (binary: {state_strings})")
             
     return chargelst
 
@@ -738,7 +738,7 @@ class StateIndexingPauli(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
-        print("DEBUG: StateIndexingPauli.set_statesdm()")
+        verb_print("DEBUG: StateIndexingPauli.set_statesdm()")
         debug_print(f"DEBUG: StateIndexingPauli.set_statesdm() statesdm: {statesdm}")
         self.statesdm = statesdm
         self.statesdm.append([])
@@ -753,7 +753,7 @@ class StateIndexingPauli(StateIndexing):
         """
         Makes dictdm, shiftlst0 for Pauli master equation indexing.
         """
-        print("DEBUG: StateIndexingPauli.set_dictdm()")
+        verb_print("DEBUG: StateIndexingPauli.set_dictdm()")
         debug_print("DEBUG: StateIndexingPauli.set_dictdm()")
         for j1 in range(self.ncharge):
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])
@@ -767,7 +767,7 @@ class StateIndexingPauli(StateIndexing):
         """
         Reduce the number of diagonal matrix elements by using symmetries.
         """
-        print("DEBUG: StateIndexingPauli.set_mapdm()")
+        verb_print("DEBUG: StateIndexingPauli.set_mapdm()")
         # noinspection PyShadowingNames
         def add_elem(counter, b, bp, charge, dictq=True):
             bbp = self.get_ind_dm0(b, bp, charge, maptype=0)
@@ -923,7 +923,7 @@ class StateIndexingDM(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
-        print("DEBUG StateIndexingDM.set_statesdm() ")
+        verb_print("DEBUG StateIndexingDM.set_statesdm() ")
         self.statesdm = list(statesdm)
         self.statesdm.append([])
         self.ndm0_, self.ndm1_, self.npauli_ = 0, 0, 0
@@ -940,7 +940,7 @@ class StateIndexingDM(StateIndexing):
         """
         Makes dictdm, shiftlst0, and shiftlst1 necessary for density-matrix element indexing.
         """
-        print("DEBUG StateIndexingDM.set_dictdm() ")
+        verb_print("DEBUG StateIndexingDM.set_dictdm() ")
         for j1 in range(self.ncharge):
             self.lenlst[j1] = len(self.statesdm[j1])
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])**2
@@ -996,7 +996,7 @@ class StateIndexingDM(StateIndexing):
         Reduce the number of diagonal matrix elements by using symmetries.
         """
         # noinspection PyShadowingNames
-        print("DEBUG StateIndexingDM.set_mapdm() indexing:", self.indexing )
+        verb_print("DEBUG StateIndexingDM.set_mapdm() indexing:", self.indexing )
         def add_elem(counter, b, bp, charge, dictq=True, conjq=True):
             bbp = self.get_ind_dm0(b, bp, charge, maptype=0)
             self.mapdm0[bbp] = counter
@@ -1052,11 +1052,11 @@ class StateIndexingDM(StateIndexing):
         self.ndm0r = self.npauli+2*(self.ndm0-self.npauli)
         self.ndm1 = self.ndm1_
 
-        print("DEBUG StateIndexingDM.set_mapdm() lenlst    :", self.lenlst    ); 
-        print("DEBUG StateIndexingDM.set_mapdm() dictdm    :", self.dictdm    ); 
-        print("DEBUG StateIndexingDM.set_mapdm() shiftlst0 :", self.shiftlst0 ); 
-        print("DEBUG StateIndexingDM.set_mapdm() shiftlst1 :", self.shiftlst1 ); 
-        print("DEBUG StateIndexingDM.set_mapdm() mapdm0    :", self.mapdm0    ); 
+        verb_print("DEBUG StateIndexingDM.set_mapdm() lenlst    :", self.lenlst    ); 
+        verb_print("DEBUG StateIndexingDM.set_mapdm() dictdm    :", self.dictdm    ); 
+        verb_print("DEBUG StateIndexingDM.set_mapdm() shiftlst0 :", self.shiftlst0 ); 
+        verb_print("DEBUG StateIndexingDM.set_mapdm() shiftlst1 :", self.shiftlst1 ); 
+        verb_print("DEBUG StateIndexingDM.set_mapdm() mapdm0    :", self.mapdm0    ); 
         #raise( Exception("DEBUG StateIndexingDM.set_mapdm() ") )
 
 

@@ -20,9 +20,10 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
 
     # Parameters (in meV)
     eps1 = eps2 = eps3 = -10.0
+
     t     = 0.0      # direct hopping
     W     = 20.0     # inter-site coupling
-    VBias = 0.0  # bias voltage
+    VBias = 0.1  # bias voltage
 
     # Lead parameters
     muS    = 0.0    # substrate chemical potential
@@ -64,6 +65,7 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
 
 
     verbosity = 1
+    #verbosity = 0
     
     # Run QmeQ solver
     if bRunQmeq:
@@ -75,7 +77,8 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print( "\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
         
         try:
-            system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
+            #system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='lsqr', mfreeq=0)
+            system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='solve', mfreeq=0)
             system.appr.verbosity = verbosity  # Set verbosity after instance creation
             system.verbosity = verbosity
             system.solve()
@@ -106,7 +109,7 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print( "######################################################################" )
         print( "######################################################################" )
         print( "### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp " )
-        print("\nDEBUG: System parameters:")
+        print("\n System parameters:")
         print(f"NSingle={NSingle}, NLeads={NLeads}")
         print(f"eps1={eps1}, eps2={eps2}, eps3={eps3}")
         print(f"t={t}, W={W}, VBias={VBias}")
@@ -115,10 +118,9 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print(f"coeffE={coeffE}, coeffT={coeffT}")
         
         NStates = 2**NSingle
-        energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) 
-                            for i in range(NStates)])
-        print("DEBUG: Energies:", energies)
-        print("DEBUG: States:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
+        energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) for i in range(NStates)])
+        #print("DEBUG: Energies:", energies)
+        #print("DEBUG: States:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
         #tunneling_amplitudes = calculate_tunneling_amplitudes(  NLeads, NStates, NSingle, VS, VT, coeffT )
         tunneling_amplitudes = calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads)
         #print("DEBUG: compare_solvers.py tunneling amplitudes before C++ (in file compare_solvers.py):")
@@ -146,6 +148,56 @@ def run_solvers( bRunQmeq=True, bRunCpp=True ):
         print("C++ energies:", energies)
     
     return qmeq_res, cpp_res
+
+def test_cpp_kernel_with_numpy_solver(cpp_res):
+    """Test solving the C++ kernel matrix with NumPy's least squares solver"""
+    print("\n\n#### Testing C++ kernel matrix with NumPy least squares solver:")
+    
+    # Get the kernel matrix from C++ result
+    kernel = cpp_res['kernel'].copy()
+    
+    # Create the RHS vector [1, 0, 0, 0, 0, 0, 0, 0]
+    n = kernel.shape[0]
+    rhs = np.zeros(n)
+    rhs[0] = 1.0
+    
+    # Replace first row with all ones (normalization condition)
+    kernel[0, :] = 1.0
+    
+    # Print the kernel and RHS for verification
+    print("\nC++ kernel matrix with normalization row:")
+    np.set_printoptions(precision=15)
+    print(kernel)
+    print("\nRHS vector:")
+    print(rhs)
+    
+    # Try least squares solver
+    solution_lstsq, residuals, rank, s = np.linalg.lstsq(kernel, rhs, rcond=None)
+    print("\nSolution from NumPy linalg.lstsq:")
+    print(solution_lstsq)
+    if len(residuals) > 0:
+        print(f"Residuals: {residuals}")
+    print(f"Rank: {rank}")
+    print(f"Singular values: {s}")
+    
+    # Normalize the solution
+    sum_prob = np.sum(solution_lstsq)
+    if abs(sum_prob) > 1e-10:
+        solution_normalized = solution_lstsq / sum_prob
+    else:
+        solution_normalized = solution_lstsq
+    
+    print("\nNormalized solution:")
+    print(solution_normalized)
+    
+    # Compare with C++ probabilities
+    print("\nC++ probabilities:")
+    print(cpp_res['probabilities'])
+    
+    # Reset print options
+    np.set_printoptions(precision=5, suppress=True)
+    
+    return solution_lstsq
 
 def compare_results(qmeq_res, cpp_res, tol=1e-8):
     """Compare results from both solvers"""
@@ -187,6 +239,111 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):
 def main():
     qmeq_res, cpp_res = run_solvers()
     compare_results(qmeq_res, cpp_res)
+    
+    # Test solving the C++ kernel with NumPy's solver
+    numpy_solution = test_cpp_kernel_with_numpy_solver(cpp_res)
+    
+    # Also try with slightly perturbed Hamiltonian to break degeneracy
+    print("\n\n#### Testing with perturbed Hamiltonian to break degeneracy:")
+    qmeq_res_perturbed, cpp_res_perturbed = run_solvers_with_perturbed_hamiltonian()
+    compare_results(qmeq_res_perturbed, cpp_res_perturbed)
+
+def run_solvers_with_perturbed_hamiltonian():
+    """Run solvers with slightly perturbed Hamiltonian to break degeneracy"""
+    # Same as run_solvers but with slightly different on-site energies
+    # System parameters
+    NSingle = 3  # number of impurity states
+    NLeads  = 2   # number of leads
+
+    # Parameters (in meV) - with small perturbations to break degeneracy
+    eps1 = -10.0
+    eps2 = -10.01  # Slightly different
+    eps3 = -10.02  # Slightly different
+
+    t     = 0.0      # direct hopping
+    W     = 20.0     # inter-site coupling
+    VBias = 0.1  # bias voltage
+
+    # Lead parameters
+    muS    = 0.0    # substrate chemical potential
+    muT    = 0.0    # tip chemical potential
+    Temp   = 0.224 # temperature in meV
+    DBand  = 1000.0 # lead bandwidth
+    GammaS = 0.20 # coupling to substrate
+    GammaT = 0.05 # coupling to tip
+
+    # Tunneling amplitudes
+    VS = np.sqrt(GammaS/np.pi)  # substrate
+    VT = np.sqrt(GammaT/np.pi)  # tip
+
+    # Position-dependent coefficients
+    coeffE = 0.4
+    coeffT = 0.3
+    
+    # One-particle Hamiltonian
+    hsingle = {(0,0): eps1-coeffE*VBias, (0,1): t, (0,2): t,
+               (1,1): eps2, (1,2): t,
+               (2,2): eps3}
+    
+    # Two-particle Hamiltonian: inter-site coupling
+    coulomb = {(0,1,1,0): W,
+               (1,2,2,1): W,
+               (0,2,2,0): W}
+    
+    # Leads: substrate (S) and scanning tip (T)
+    mu_L   = {0: muS, 1: muT + VBias}
+    Temp_L = {0: Temp, 1: Temp}
+    
+    # Coupling between leads (1st number) and impurities (2nd number)
+    TLeads = {(0,0): VS,         # S <-- 1
+              (0,1): VS,         # S <-- 2
+              (0,2): VS,         # S <-- 3
+              (1,0): VT,         # T <-- 1
+              (1,1): coeffT*VT,  # T <-- 2
+              (1,2): coeffT*VT}  # T <-- 3
+
+    verbosity = 1
+    
+    print("\n\n#### Running solvers with perturbed Hamiltonian (eps1={}, eps2={}, eps3={})".format(eps1, eps2, eps3))
+    
+    # Run QmeQ solver
+    system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,
+                         kerntype='Pauli', indexing='Lin', itype=0, symq=True, solmethod='solve', mfreeq=0)
+    system.appr.verbosity = verbosity
+    system.verbosity = verbosity
+    system.solve()
+    
+    qmeq_res = {
+        'current': system.current[1],
+        'energies': system.Ea,
+        'probabilities': system.phi0,
+        'kernel': system.kern,
+    }
+    
+    # Run C++ solver
+    NStates = 2**NSingle
+    energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) for i in range(NStates)])
+    tunneling_amplitudes = calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads)
+    
+    lead_mu = np.array([muS, muT + VBias])
+    lead_temp = np.array([Temp, Temp])
+    lead_gamma = np.array([GammaS, GammaT])
+    pauli = PauliSolver(verbosity=verbosity)
+    solver = pauli.create_solver(NStates, NLeads, energies, tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity)
+    pauli.solve(solver)
+    kernel = pauli.get_kernel(solver, NStates)
+    probabilities = pauli.get_probabilities(solver, NStates)
+    currents = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
+    pauli.cleanup(solver)
+    
+    cpp_res = {
+        'current': currents[1],
+        'energies': energies,
+        'probabilities': probabilities,
+        'kernel': kernel,
+    }
+    
+    return qmeq_res, cpp_res
 
 if __name__ == "__main__":
     main()
