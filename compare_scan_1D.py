@@ -49,11 +49,12 @@ def initialize_qmeq_solver():
 
     qmeq_system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype='Pauli', indexing='Lin', itype=0, symq=True, solmethod='solve', mfreeq=0)
 
+    qmeq_system.verbosity = verbosity
     return qmeq_system
 
 def initialize_cpp_solver():
     """Initialize C++ solver once"""
-    pauli = PauliSolver()
+    pauli = PauliSolver( verbosity=verbosity )
     NStates = 2**NSingle
     
     # Create constant parts of the solver
@@ -63,7 +64,7 @@ def initialize_cpp_solver():
     lead_gamma = np.array([GammaS, GammaT])
     
     # Create solver instance with dummy energies
-    solver = pauli.create_solver(NStates, NLeads, np.zeros(NStates), tunneling_amplitudes, lead_mu, lead_temp, lead_gamma)
+    solver = pauli.create_solver(NStates, NLeads, np.zeros(NStates), tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity)
     
     return pauli, solver, NStates
 
@@ -125,12 +126,14 @@ def scan_cpp(eps, bPrint=False):
 if __name__ == "__main__":
     # Define energy range
     bPrint = True
-    nstep = 10
+    nstep = 3
     eps = np.zeros( (nstep,3) )
     ts = np.linspace(0, 1, nstep)
     eps[:,0] = 0.1+ts
     eps[:,1] = 0.2+ts
     eps[:,2] = 0.3+ts
+
+    verbosity = 1
     
     # Run scan
     qmeq_results = scan_QmeQ(eps, bPrint)
