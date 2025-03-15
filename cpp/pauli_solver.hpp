@@ -13,8 +13,6 @@ const double PI = 3.14159265358979323846;
 const double HBAR = 0.6582119;  // Reduced Planck constant in meV*ps
 const double KB = 0.08617333;   // Boltzmann constant in meV/K
 
-
-
 template<typename T> void swap( T& a, T& b ) {
     T tmp = a;
     a = b;
@@ -33,6 +31,63 @@ void swap_matrix_cols(double* mat, int nrows, int ncols, int col1, int col2) {
     }
 }
 
+inline static int site_to_state(int site) {
+    return 1 << site;
+}
+
+inline static bool site_in_state(int site, int state) {
+    return (state >> site) & 1;
+}
+
+
+
+// New method to calculate state energy using single-particle Hamiltonian
+double calculate_state_energy(int state, int nSingle, const double* Hsingle, double W) {
+    //printf("DEBUG calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
+    double energy = 0.0;
+    // Single-particle energies
+    for(int i = 0; i < nSingle; i++) {
+        int imask = site_to_state(i);
+        if( state & imask) {
+            // Access diagonal elements correctly
+            energy += Hsingle[i * nSingle + i];
+        }
+    }
+    //DEBUG
+    // Hopping terms
+    for(int i = 0; i < nSingle; i++) {
+        int imask = site_to_state(i);
+        for(int j = i+1; j < nSingle; j++) {
+            int jmask = site_to_state(j);
+            // Check if state i is occupied and state j is empty
+            if( (state & imask) && !(state & jmask) ) {
+                // Fermion sign
+                int fsign = 1;
+                for(int k = i+1; k < j; k++) {
+                    if( (state & site_to_state(k)) ) fsign *= -1;
+                }
+                // Access off-diagonal elements correctly
+                if(i < nSingle && j < nSingle) { // Bounds check
+                    energy += fsign * Hsingle[i * nSingle + j];
+                }
+            }
+        }
+    }
+    //DEBUG
+    // Coulomb interaction
+    for(int i = 0; i < nSingle; i++) {
+        int imask = site_to_state(i);
+        for(int j = i+1; j < nSingle; j++) {
+            int jmask = site_to_state(j);
+            if( (state & imask) && (state & jmask) ) {
+                energy += W;
+            }
+        }
+    }
+    //DEBUG
+    return energy;
+}
+
 
 // Lead parameters
 struct LeadParams {
@@ -41,8 +96,17 @@ struct LeadParams {
     double gamma; // Coupling strength
 };
 
+
+template<typename T> bool _reallocate(T*& ptr, int size) {
+    bool b = ptr != nullptr;
+    if(b){ delete[] ptr; }
+    ptr = new T[size];
+    return b;
+}
+
 // Parameters for the solver
 struct SolverParams {
+    int nSingle;  // Number of single-particle states
     int nstates;  // Number of states
     int nleads;   // Number of leads
     double* energies;  // State energies [nstates]
@@ -50,28 +114,36 @@ struct SolverParams {
     double* coupling;  // Coupling matrix elements [nleads * nstates * nstates]
     
     // Constructor
-    SolverParams() : energies(nullptr), leads(nullptr), coupling(nullptr) {}
+    SolverParams() : nSingle(0), nstates(0), nleads(0), energies(nullptr), leads(nullptr), coupling(nullptr) {}
+
+    // Reallocate memory
+    void reallocate(int nstates, int nleads) {
+        this->nstates = nstates;
+        this->nleads  = nleads;
+        _reallocate(energies, nstates);
+        _reallocate(leads,    nleads);
+        _reallocate(coupling, nleads * nstates * nstates);
+    }
     
     // Copy constructor
     SolverParams(const SolverParams& other) {
+        nSingle = other.nSingle;
         nstates = other.nstates;
-        nleads = other.nleads;
-        
+        nleads  = other.nleads;
         // Deep copy arrays
         energies = new double[nstates];
-        leads = new LeadParams[nleads];
+        leads    = new LeadParams[nleads];
         coupling = new double[nleads * nstates * nstates];
-        
         std::memcpy(energies, other.energies, nstates * sizeof(double));
-        std::memcpy(leads, other.leads, nleads * sizeof(LeadParams));
+        std::memcpy(leads,    other.leads,    nleads * sizeof(LeadParams));
         std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
     }
     
     // Destructor
     ~SolverParams() {
-        delete[] energies;
-        delete[] leads;
-        delete[] coupling;
+        if(energies) delete[] energies;
+        if(leads) delete[] leads;
+        if(coupling) delete[] coupling;
     }
     
     // Assignment operator
@@ -80,16 +152,14 @@ struct SolverParams {
             delete[] energies;
             delete[] leads;
             delete[] coupling;
-            
+            nSingle = other.nSingle;
             nstates = other.nstates;
-            nleads = other.nleads;
-            
+            nleads  = other.nleads;
             energies = new double[nstates];
-            leads = new LeadParams[nleads];
+            leads    = new LeadParams[nleads];
             coupling = new double[nleads * nstates * nstates];
-            
             std::memcpy(energies, other.energies, nstates * sizeof(double));
-            std::memcpy(leads, other.leads, nleads * sizeof(LeadParams));
+            std::memcpy(leads,    other.leads, nleads * sizeof(LeadParams));
             std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
         }
         return *this;
@@ -98,6 +168,48 @@ struct SolverParams {
     // Disable move constructor and assignment
     SolverParams(SolverParams&&) = delete;
     SolverParams& operator=(SolverParams&&) = delete;
+
+    /// Calculate state energies
+    void calculate_state_energies(const double* Hsingle, double W) {
+        for(int state = 0; state < nstates; state++) {
+            energies[state] = calculate_state_energy(state, nSingle, Hsingle, W);
+        }
+    }
+
+    /// Calculate tunneling amplitudes between states
+    void calculate_tunneling_amplitudes(int NLeads, int NStates, int NSingle, const double* TLeads) {
+        // Initialize matrix
+        coupling = new double[NLeads * NStates * NStates];
+        memset(coupling, 0, NLeads * NStates * NStates * sizeof(double));
+
+        // Iterate over all many-body states
+        for(int j1 = 0; j1 < NStates; j1++) {
+            // Get binary representation
+            int state = j1;
+            
+            // Iterate over single-particle states
+            for(int j2 = 0; j2 < NSingle; j2++) {
+                // Calculate fermion sign
+                int fsign = 1;
+                for(int k = 0; k < j2; k++) {
+                    if((state >> k) & 1) fsign *= -1;
+                }
+
+                // Process each lead
+                for(int lead = 0; lead < NLeads; lead++) {
+                    double tamp = TLeads[lead * NSingle + j2];
+                    
+                    if(!((state >> j2) & 1)) {  // Add electron
+                        int ind = state | (1 << j2);
+                        coupling[lead * NStates * NStates + ind * NStates + j1] = fsign * tamp;
+                    } else {  // Remove electron
+                        int ind = state & ~(1 << j2);
+                        coupling[lead * NStates * NStates + ind * NStates + j1] = fsign * tamp; // Assuming real amplitudes
+                    }
+                }
+            }
+        }
+    }
 };
 
 class PauliSolver {
@@ -543,7 +655,7 @@ public:
     
     // Generate kernel matrix
     void generate_kern() {
-        if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
+        //if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
         const int n = params.nstates;
         generate_fct();
         std::fill(kernel, kernel + n * n, 0.0);
@@ -551,7 +663,7 @@ public:
             int b = state_order_inv[state];
             generate_coupling_terms(b); 
         }
-        if(verbosity > 0) { printf( "generate_kern(): kernel: \n" ); print_matrix(kernel, n, n); }
+        if(verbosity > 1) { printf( "generate_kern(): kernel: \n" ); print_matrix(kernel, n, n); }
         //normalize_kernel();
         //if(verbosity > 0) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
     }
@@ -668,8 +780,9 @@ public:
     }
 
     // Getter methods
-    const double* get_kernel() const { return kernel; }
+    const double* get_kernel()        const { return kernel; }
     const double* get_probabilities() const { return probabilities; }
-    const double* get_rhs() const { return rhs; }
+    const double* get_energies()      const { return params.energies; }
+    const double* get_rhs()           const { return rhs; }
     const double* get_pauli_factors() const { return pauli_factors; }
 };

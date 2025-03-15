@@ -20,8 +20,8 @@ void* create_pauli_solver(int nstates, int nleads,
     // Allocate and set up leads
     params.leads = new LeadParams[nleads];
     for(int i = 0; i < nleads; i++) {
-        params.leads[i].mu = lead_mu[i];
-        params.leads[i].temp = lead_temp[i];
+        params.leads[i].mu    = lead_mu[i];
+        params.leads[i].temp  = lead_temp[i];
         params.leads[i].gamma = lead_gamma[i];
     }
     
@@ -48,6 +48,29 @@ void* create_pauli_solver(int nstates, int nleads,
     return solver;
 }
 
+void* create_pauli_solver_new(int nSingle, int nstates, int nleads, double* Hsingle, double W, double* TLeads, double* lead_mu, double* lead_temp, double* lead_gamma, int verbosity = 0) {
+    SolverParams params;
+    params.nSingle = nSingle;
+    params.nstates = nstates;
+    params.nleads  = nleads;
+    params.reallocate(nstates, nleads);
+    //printf("DEBUG: params.energies after reallocate = %p\n", params.energies);    
+    for(int i = 0; i < nleads; i++) {
+        params.leads[i].mu    = lead_mu[i];
+        params.leads[i].temp  = lead_temp[i];
+        params.leads[i].gamma = lead_gamma[i];
+    }
+    // Use nSingle for the Hsingle matrix dimensions, not nstates
+    params.calculate_state_energies(Hsingle, W);
+    //printf("DEBUG: params.energies after calculate_state_energies = %p\n", params.energies);
+    // Use nSingle for single-particle states
+    params.calculate_tunneling_amplitudes(nleads, nstates, nSingle, TLeads);
+    PauliSolver* solver = new PauliSolver(params, verbosity);
+    //printf("DEBUG: solver->params.energies after constructor = %p\n", solver->params.energies);
+    //printf("DEBUG: solver = %p\n", solver);
+    return solver;
+}
+
 // Solve the master equation
 void solve_pauli(void* solver_ptr) {
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
@@ -68,6 +91,19 @@ void get_probabilities(void* solver_ptr, double* out_probs) {
     const double* probs = solver->get_probabilities();
     int n = solver->params.nstates;
     std::memcpy(out_probs, probs, n * sizeof(double));
+}
+
+// Get the energies
+void get_energies(void* solver_ptr, double* out_energies) {
+    // Print full 64-bit pointer value
+    //printf("DEBUG: solver_ptr = %p (full 64-bit address)\n", solver_ptr); 
+    // Check if pointer is valid (basic sanity check)    
+    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
+    //printf("DEBUG: solver = %p\n", solver);
+    // Verify solver pointer is valid before using it        
+    int n = solver->params.nstates;
+    const double* energies = solver->get_energies();
+    std::memcpy(out_energies, energies, n * sizeof(double));
 }
 
 // Calculate current through a lead

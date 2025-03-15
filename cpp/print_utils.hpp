@@ -4,6 +4,12 @@
 #include <vector>
 #include <cstdio>
 
+//#define DEBUG   /* empty */
+//#define DEBUG   printf( "DEBUG #l %i %s \n",    __LINE__, __PRETTY_FUNCTION__ );
+#define DEBUG   printf( "DEBUG #l %i %s \n",    __LINE__, __FUNCTION__ );
+// #define DEBUGF  printf( "DEBUG #l %i %s %s \n", __LINE__, __FUNCTION__, __FILE__ );
+//#define DBG(format,args...) { printf("DEBUG "); printf(format,## args); }
+
 inline void print_vector(const double* vec, int n, const char* fmt = "%g ", bool newline = true ){
     printf("[ "); 
     for(int j = 0; j < n; j++) { printf(fmt, vec[j]); }

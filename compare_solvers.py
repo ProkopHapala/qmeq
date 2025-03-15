@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 
+# Set up ASan preloading before any imports
+import os
+bASAN = True
+if bASAN:
+    # Get ASan library path
+    asan_lib = os.popen('gcc -print-file-name=libasan.so').read().strip()
+    print("Preloading ASan library: ", asan_lib)
+    # Set LD_PRELOAD environment variable
+    os.environ['LD_PRELOAD'] = asan_lib
+    os.environ['ASAN_OPTIONS'] = 'detect_leaks=0'
+
 import sys
 sys.stdout = sys.stderr = open(sys.stdout.fileno(), mode='w', buffering=1)
 
@@ -46,6 +57,9 @@ VT = np.sqrt(GammaT/np.pi)  # tip
 coeffE = 0.4
 coeffT = 0.3
 
+
+verbosity = 1
+
 # ==== Functions
 
 def build_hamiltonian(eps1, eps2, eps3, t, W):
@@ -75,7 +89,7 @@ def build_leads(muS, muT, Temp, VS, VT, coeffT, VBias):
     
     return mu_L, Temp_L, TLeads
 
-def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads, verbosity=4):  # Compare QmeQ and C++ solvers for same Hamiltonian
+def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ and C++ solvers for same Hamiltonian
     # Run QmeQ solver
     if True:
         print( "\n\n" )
@@ -94,21 +108,21 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads, verbosity=4):  # Co
             traceback.print_exc()
 
         res = {
-            'current': system.current[1],
-            'energies': system.Ea,
-            'probabilities': system.phi0,
-            'kernel': system.kern,
+            'current':        system.current[1],
+            'energies':       system.Ea,
+            'probabilities':  system.phi0,
+            'kernel':         system.kern,
         }
         #print("\nQmeQ hsingle:", Hsingle)
         #print("QmeQ coulomb:", Hcoulomb)
         print("QmeQ states:", [bin(i)[2:].zfill(NSingle) for i in range(2**NSingle)])
         print("QmeQ energies:", system.Ea)
         print("QmeQ probabilities:", system.phi0)
-        print("QmeQ kernel:", system.kern)
+        print("QmeQ kernel:\n", system.kern)
 
         return res
 
-def run_cpp_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads, verbosity=4): 
+def run_cpp_solver(TLeads): 
 
     # Run C++ solver
     if True:
@@ -116,23 +130,28 @@ def run_cpp_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads, verbosity=4):
         print( "######################################################################" )
         print( "######################################################################" )
         print( "\n### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp \n" )
-        # print("\n System parameters:")
-        # print(f"NSingle={NSingle}, NLeads={NLeads}")
-        # print(f"eps1={eps1}, eps2={eps2}, eps3={eps3}")
-        # print(f"t={t}, W={W}, VBias={VBias}")
-        # print(f"GammaS={GammaS}, GammaT={GammaT}")
-        # print(f"VS={VS}, VT={VT}")
-        # print(f"coeffE={coeffE}, coeffT={coeffT}")
         
         NStates = 2**NSingle
-        energies = np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) for i in range(NStates)])
-        tunneling_amplitudes = calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads)
         
         lead_mu              = np.array([muS, muT + VBias])
         lead_temp            = np.array([Temp, Temp])
         lead_gamma           = np.array([GammaS, GammaT])
-        pauli                = PauliSolver( verbosity=verbosity )
-        solver               = pauli.create_solver(   NStates, NLeads, energies, tunneling_amplitudes,  lead_mu, lead_temp, lead_gamma, verbosity)
+        pauli                = PauliSolver( verbosity=verbosity, bASAN=bASAN )
+
+        TLeads_            = np.zeros( (NLeads, NStates) )
+        for k,v in TLeads.items():
+            TLeads_[k[0], k[1]] = v
+        Hsingle_ = np.zeros( (NSingle, NSingle) )
+        for k,v in Hsingle.items():
+            Hsingle_[k[0], k[1]] = v
+
+        print("\nHsingle:");         print(Hsingle_)
+        print("\nTLeads:");         print(TLeads_)
+
+        solver               = pauli.create_solver_new(   NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, verbosity)
+
+        energies = pauli.get_energies(solver, NStates)
+
         pauli.solve(solver)
         kernel               = pauli.get_kernel(solver, NStates)
         probabilities        = pauli.get_probabilities(solver, NStates)
@@ -140,10 +159,10 @@ def run_cpp_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads, verbosity=4):
         pauli.cleanup(solver)
         
         res = {
-            'current': currents[1],
-            'energies': energies,
+            'current':       currents[1],
+            'energies':      energies,
             'probabilities': probabilities,
-            'kernel': kernel,
+            'kernel':        kernel,
         }
 
         #print("\nQmeQ hsingle:", Hsingle)
@@ -151,7 +170,7 @@ def run_cpp_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads, verbosity=4):
         print("\nC++ states:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
         print("C++ energies:", energies)
         print("C++ probabilities:", probabilities)
-        print("C++ kernel:", kernel)
+        print("C++ kernel:\n", kernel)
 
     
     return res
@@ -263,6 +282,10 @@ if __name__ == "__main__":
     #print("\n\n#### Testing with perturbed Hamiltonian to break degeneracy:")
     #eps1, eps2, eps3 = eps1, eps2, eps3
     Hsingle,  Hcoulomb = build_hamiltonian(eps1, eps2, eps3, t, W)
-    cpp_res  = run_cpp_solver (Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
+
+    print( "hsingle:\n", Hsingle)
+    print( "coulomb:\n", Hcoulomb)
+
+    cpp_res  = run_cpp_solver(TLeads)
     qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
     compare_results(qmeq_res, cpp_res)

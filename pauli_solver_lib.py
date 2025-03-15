@@ -8,17 +8,27 @@ from cpp_utils_ import compile_lib, work_dir, _np_as, c_double_p, c_int_p
 class PauliSolver:
     """Python wrapper for C++ PauliSolver class"""
     
-    def __init__(self, verbosity=0):
+    def __init__(self, verbosity=0, bASAN=False):
         """Initialize the solver by loading the C++ library"""
+        self.bASAN = bASAN
         self.lib = self._compile_and_load()
         self._setup_function_signatures()
         self.verbosity = verbosity
         
+
     def _compile_and_load(self):
         """Compile and load the C++ library"""
         cpp_dir = os.path.join(work_dir(__file__), 'cpp')
-        compile_lib('pauli_solver_wrapper', FFLAGS="-std=c++17 -O3 -fPIC", LFLAGS="", path=cpp_dir, clean=True)
-        return ctypes.CDLL(os.path.join(cpp_dir, 'pauli_solver_wrapper.so'))
+        compile_lib('pauli_solver_wrapper', path=cpp_dir, clean=True, bASAN=self.bASAN, bDEBUG=True)
+        
+        # When using ASan, ensure it's loaded first
+        if self.bASAN:
+            # Get ASan library path
+            asan_lib = os.popen('gcc -print-file-name=libasan.so').read().strip()
+            # Load ASan first, then our library
+            ctypes.CDLL(asan_lib, mode=ctypes.RTLD_GLOBAL)
+            
+        return ctypes.CDLL(os.path.join(cpp_dir, 'pauli_solver_wrapper.so'), mode=ctypes.RTLD_GLOBAL)
         
     def _setup_function_signatures(self):
         """Set up C++ function signatures"""
@@ -27,6 +37,13 @@ class PauliSolver:
             c_double_p, c_double_p, c_double_p, c_double_p, c_double_p, ctypes.c_int
         ]
         self.lib.create_pauli_solver.restype  = ctypes.c_void_p
+        
+        self.lib.create_pauli_solver_new.argtypes = [
+            ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            c_double_p, ctypes.c_double, c_double_p,
+            c_double_p, c_double_p, c_double_p, ctypes.c_int
+        ]
+        self.lib.create_pauli_solver_new.restype  = ctypes.c_void_p
         
         self.lib.solve_pauli.argtypes = [ctypes.c_void_p]
         self.lib.solve_pauli.restype  = None
@@ -37,12 +54,15 @@ class PauliSolver:
         self.lib.get_probabilities.argtypes = [ctypes.c_void_p, c_double_p]
         self.lib.get_probabilities.restype  = None
         
+        self.lib.get_energies.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_energies.restype  = None
+        
         self.lib.calculate_current.argtypes = [ctypes.c_void_p, ctypes.c_int]
         self.lib.calculate_current.restype  = ctypes.c_double
         
         self.lib.delete_pauli_solver.argtypes = [ctypes.c_void_p]
         self.lib.delete_pauli_solver.restype  = None
-        print("PauliSolver::_setup_function_signatures() DONE")
+        #print("PauliSolver::_setup_function_signatures() DONE")
     
     def create_solver(self, nstates, nleads, energies, tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity=0):
         """Create a new PauliSolver instance
@@ -79,10 +99,53 @@ class PauliSolver:
         )
         return solver
     
+    def create_solver_new(self,  nstates, nleads, Hsingle, W, TLeads, lead_mu, lead_temp, lead_gamma, verbosity=0):
+        """Create a new PauliSolver instance
+        
+        Args:
+            nstates (int): Number of states
+            nleads (int): Number of leads
+            Hsingle (np.ndarray): Single-particle Hamiltonian (nstates, nstates)
+            W (float): Inter-site coupling
+            TLeads (np.ndarray): Tunneling amplitudes (nleads, nstates, nstates)
+            lead_mu (np.ndarray): Chemical potentials for each lead
+            lead_temp (np.ndarray): Temperatures for each lead
+            lead_gamma (np.ndarray): Coupling strengths for each lead
+            
+        Returns:
+            solver: Handle to C++ solver instance
+        """
+        # Ensure arrays are C-contiguous and in the correct format
+        #Hsingle    = np.ascontiguousarray(Hsingle,    dtype=np.float64)
+        #TLeads     = np.ascontiguousarray(TLeads,     dtype=np.float64)
+        lead_mu    = np.ascontiguousarray(lead_mu,    dtype=np.float64)
+        lead_temp  = np.ascontiguousarray(lead_temp,  dtype=np.float64)
+        lead_gamma = np.ascontiguousarray(lead_gamma, dtype=np.float64)
+        
+        nSingle = len(Hsingle)
+
+        # Create solver
+        solver = self.lib.create_pauli_solver_new(
+            nSingle, nstates, nleads,
+            _np_as(Hsingle, c_double_p), W, _np_as(TLeads, c_double_p),
+            _np_as(lead_mu, c_double_p), _np_as(lead_temp, c_double_p), _np_as(lead_gamma, c_double_p),
+            self.verbosity
+        )
+        return solver
+
+
     def solve(self, solver):
         """Solve the master equation"""
         self.lib.solve_pauli(solver)
     
+    def get_energies(self, solver, nstates):
+        """Get the kernel matrix"""
+        energies = np.zeros(nstates)
+        #print("\nDEBUG: energies before get_energies = ", nstates, energies)
+        self.lib.get_energies(solver, _np_as(energies, c_double_p))
+        #print("DEBUG: energies after get_energies = ", energies)
+        return energies
+
     def get_kernel(self, solver, nstates):
         """Get the kernel matrix"""
         kernel = np.zeros((nstates, nstates))
