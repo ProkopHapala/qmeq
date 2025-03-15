@@ -5,7 +5,7 @@
 #include <cstring>
 #include <cmath>
 #include "gauss_solver.hpp"
-#include "iterative_solver.hpp"
+//#include "iterative_solver.hpp"
 #include "print_utils.hpp"
 
 // Constants should be defined in meV units
@@ -254,7 +254,7 @@ public:
     }
 
     void init_states_by_charge() {
-        printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
+        //printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
         const int n = params.nstates;
         int max_charge = 0;
         
@@ -649,7 +649,7 @@ public:
         rhs = new double[n];
         probabilities = new double[n];
         pauli_factors = new double[params.nleads * n * n * 2];
-        printf("DEBUG: PauliSolve() DONE verbosity=%i \n", verbosity);
+        //printf("DEBUG: PauliSolve() DONE verbosity=%i \n", verbosity);
     }
 
     ~PauliSolver() {
