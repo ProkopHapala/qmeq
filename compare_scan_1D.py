@@ -94,29 +94,34 @@ def run_cpp_solver(eps1, eps2, eps3, pauli, solver, NStates):
     pauli.solve(solver)
     return pauli.calculate_current(solver, 1)
 
-def scan_QmeQ(eps_range):
+def scan_QmeQ(eps_range, bPrint=False):
     qmeq_system = initialize_qmeq_solver()
     res = []
     for eps in eps_range:
         qmeq_current = run_qmeq_solver(eps, eps, eps, qmeq_system)
         res.append(qmeq_current)
+        if bPrint:
+            print(f"{eps:.2f} {qmeq_current:.2f}")
     return res
 
-def scan_cpp(eps_range):
+def scan_cpp(eps_range, bPrint=False):
     pauli, cpp_solver, NStates = initialize_cpp_solver()
     res = []
     for eps in eps_range:
         cpp_current = run_cpp_solver(eps, eps, eps, pauli, cpp_solver, NStates)
         res.append(cpp_current)
+        if bPrint:
+            print(f"{eps:.2f} {cpp_current:.2f}")
     return res
     
 if __name__ == "__main__":
     # Define energy range
+    bPrint = True
     eps_range = np.linspace(-10, 10, 10)
     
     # Run scan
-    qmeq_results = scan_QmeQ(eps_range)
-    cpp_results  = scan_cpp(eps_range)
+    qmeq_results = scan_QmeQ(eps_range, bPrint)
+    cpp_results  = scan_cpp(eps_range, bPrint)
             
     plt.figure(figsize=(10, 6))
     plt.plot(eps_range, qmeq_results, 'b-', label='QmeQ Pauli')
