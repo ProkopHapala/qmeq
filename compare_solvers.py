@@ -19,6 +19,8 @@ from sys import path
 path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
 
 import qmeq
+from qmeq import indexing as qmqsi
+#from qmeq.indexing import get_state_order
 import traceback
 
 # ==== Setup
@@ -26,6 +28,7 @@ import traceback
 # setup numpy print options to infinite line length
 np.set_printoptions(linewidth=256, suppress=True)
 
+import pauli_solver_lib as psl
 from pauli_solver_lib import PauliSolver, calculate_state_energy, calculate_tunneling_amplitudes
 
 # System parameters
@@ -38,7 +41,7 @@ eps2 = -10.01  # Slightly different
 eps3 = -10.02  # Slightly different
 
 t     = 0.0      # direct hopping
-W     = 20.0     # inter-site coupling
+W     = 3.0     # inter-site coupling
 VBias = 0.1  # bias voltage
 
 # Lead parameters
@@ -63,6 +66,7 @@ verbosity = 1
 # ==== Functions
 
 def build_hamiltonian(eps1, eps2, eps3, t, W):
+    print("\n\n#### Building Hamiltonian: eps: ", [eps1, eps2, eps3], " t: ", t, " W: ", W)
     # One-particle Hamiltonian
     hsingle = {(0,0): eps1, (0,1): t, (0,2): t,
                (1,1): eps2, (1,2): t,
@@ -97,16 +101,15 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ an
         print( "######################################################################" )
         print( "\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
         
-        try:
-            system = qmeq.Builder(NSingle, Hsingle, Hcoulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='solve', mfreeq=0)
-            system.appr.verbosity = verbosity  # Set verbosity after instance creation
-            system.verbosity = verbosity
-            system.solve()
+        system = qmeq.Builder(NSingle, Hsingle, Hcoulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='solve', mfreeq=0)
+        system.appr.verbosity = verbosity  # Set verbosity after instance creation
+        system.verbosity = verbosity
+        system.solve()
 
-        except Exception as e:
-            print(f"Error in QmeQ solver: {e}")
-            traceback.print_exc()
-
+        chargelst = system.si.chargelst
+        state_order = qmqsi.get_state_order(chargelst); print("QmeQ state order:", state_order)
+        state_occupancy = qmqsi.get_state_occupancy_strings(chargelst, NSingle); print("QmeQ state occupancy:", state_occupancy)
+        
         res = {
             'current':        system.current[1],
             'energies':       system.Ea,
@@ -115,7 +118,6 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ an
         }
         #print("\nQmeQ hsingle:", Hsingle)
         #print("QmeQ coulomb:", Hcoulomb)
-        print("QmeQ states:", [bin(i)[2:].zfill(NSingle) for i in range(2**NSingle)])
         print("QmeQ energies:", system.Ea)
         print("QmeQ probabilities:", system.phi0)
         print("QmeQ kernel:\n", system.kern)
@@ -148,7 +150,11 @@ def run_cpp_solver(TLeads):
         print("\nHsingle:");         print(Hsingle_)
         print("\nTLeads:");         print(TLeads_)
 
-        solver               = pauli.create_solver_new(   NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, verbosity)
+        #state_order = [0, 1, 2, 4, 3, 5, 6, 7]
+        state_order = [0, 4, 2, 6, 1, 5, 3, 7]
+        state_order = np.array(state_order, dtype=np.int32)
+
+        solver               = pauli.create_pauli_solver_new( NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, state_order, verbosity)
 
         energies = pauli.get_energies(solver, NStates)
 
@@ -167,7 +173,6 @@ def run_cpp_solver(TLeads):
 
         #print("\nQmeQ hsingle:", Hsingle)
         #print("QmeQ coulomb:", Hcoulomb)
-        print("\nC++ states:", [bin(i)[2:].zfill(NSingle) for i in range(NStates)])
         print("C++ energies:", energies)
         print("C++ probabilities:", probabilities)
         print("C++ kernel:\n", kernel)
@@ -225,7 +230,7 @@ def test_cpp_kernel_with_numpy_solver(cpp_res):  # Verify C++ kernel by solving 
     
     return solution_lstsq
 
-def compare_results(qmeq_res, cpp_res, tol=1e-8):  # Compare results from both solvers
+def compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True):  # Compare results from both solvers
     """Compare results from both solvers"""
     print( "\n\n" )
     print( "######################################################################" )
@@ -233,7 +238,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):  # Compare results from both s
     print("#### Comparing QmeQ vs C++ results:")
 
     diff = np.max(np.abs(qmeq_res['energies'] - cpp_res['energies']))
-    if diff > tol:
+    if diff > tol or bPrintSame:
         print("Energies diff :", diff)
         print("Energies QmeQ :", qmeq_res['energies'])
         print("Energies C++  :", cpp_res['energies'])
@@ -241,7 +246,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):  # Compare results from both s
         print(f"Energies:   OK (diff({diff}) < tol({tol}))")
     
     diff = np.max(np.abs(qmeq_res['probabilities'] - cpp_res['probabilities']))
-    if diff > tol:
+    if diff > tol or bPrintSame:
         print("Probabilities diff :", diff)
         print("Probabilities QmeQ :", qmeq_res['probabilities'])
         print("Probabilities C++  :", cpp_res['probabilities'])
@@ -249,7 +254,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):  # Compare results from both s
         print(f"Probabilities:   OK (diff({diff}) < tol({tol}))")
     
     diff = np.max(np.abs(qmeq_res['kernel'] - cpp_res['kernel']))
-    if diff > tol:
+    if diff > tol or bPrintSame:
         print("Kernel:   diff:", diff)
         print("Kernel QmeQ:\n", qmeq_res['kernel'])
         print("Kernel C++:\n", cpp_res['kernel'])
@@ -257,7 +262,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):  # Compare results from both s
         print(f"Kernel:   OK (diff({diff}) < tol({tol}))")
     
     diff = np.max(np.abs(qmeq_res['current'] - cpp_res['current']))
-    if diff > tol:
+    if diff > tol or bPrintSame:
         print("Current diff :", diff)
         print("Current QmeQ :", qmeq_res['current'])
         print("Current C++  :", cpp_res['current'])
@@ -270,19 +275,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8):  # Compare results from both s
 if __name__ == "__main__":
 
     mu_L, Temp_L, TLeads = build_leads(muS, muT, Temp, VS, VT, coeffT, VBias)
-
-    # -- Symmetric Hamiltonian
-    #print("\n\n#### Testing with symmetric Hamiltonian (with degeneracies):")
-    # Hsingle, Hcoulomb = build_hamiltonian(eps1, eps1, eps1, t, W)
-    # qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
-    # cpp_res  = run_cpp_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
-    # compare_results(qmeq_res, cpp_res)
-    
-    # -- Asymmetric Hamiltonian
-    #print("\n\n#### Testing with perturbed Hamiltonian to break degeneracy:")
-    #eps1, eps2, eps3 = eps1, eps2, eps3
     Hsingle,  Hcoulomb = build_hamiltonian(eps1, eps2, eps3, t, W)
-
     print( "hsingle:\n", Hsingle)
     print( "coulomb:\n", Hcoulomb)
 

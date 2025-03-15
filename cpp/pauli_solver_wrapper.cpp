@@ -2,6 +2,8 @@
 #include <cstdio>
 #include "print_utils.hpp"
 
+#include <cstdio>  // Make sure this is included
+
 extern "C" {
 
 // Create a solver instance
@@ -48,24 +50,37 @@ void* create_pauli_solver(int nstates, int nleads,
     return solver;
 }
 
-void* create_pauli_solver_new(int nSingle, int nstates, int nleads, double* Hsingle, double W, double* TLeads, double* lead_mu, double* lead_temp, double* lead_gamma, int verbosity = 0) {
+void* create_pauli_solver_new(int nSingle, int nstates, int nleads, double* Hsingle, double W, double* TLeads, double* lead_mu, double* lead_temp, double* lead_gamma, int* state_order, int verbosity = 0) {
+    setvbuf(stdout, NULL, _IONBF, 0);  // Disable buffering for stdout
+    //printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+    //printf("create_pauli_solver_new() nSingle=%i nstates=%i nleads=%i Hsingle=%p W=%f TLeads=%p lead_mu=%p lead_temp=%p lead_gamma=%p state_order=%p\n", nSingle, nstates, nleads, Hsingle, W, TLeads, lead_mu, lead_temp, lead_gamma, state_order);
+    //DEBUG
     SolverParams params;
     params.nSingle = nSingle;
     params.nstates = nstates;
     params.nleads  = nleads;
     params.reallocate(nstates, nleads);
-    //printf("DEBUG: params.energies after reallocate = %p\n", params.energies);    
+    //DEBUG
     for(int i = 0; i < nleads; i++) {
         params.leads[i].mu    = lead_mu[i];
         params.leads[i].temp  = lead_temp[i];
         params.leads[i].gamma = lead_gamma[i];
     }
+    //DEBUG
+    for(int i = 0; i < nstates; i++) {
+        params.state_order[i] = state_order[i];
+    }
+    //DEBUG
+    //printf("DEBUG: Hsingle = %p\n", Hsingle);
     // Use nSingle for the Hsingle matrix dimensions, not nstates
     params.calculate_state_energies(Hsingle, W);
+    //DEBUG
     //printf("DEBUG: params.energies after calculate_state_energies = %p\n", params.energies);
     // Use nSingle for single-particle states
     params.calculate_tunneling_amplitudes(nleads, nstates, nSingle, TLeads);
+    //DEBUG
     PauliSolver* solver = new PauliSolver(params, verbosity);
+    //DEBUG
     //printf("DEBUG: solver->params.energies after constructor = %p\n", solver->params.energies);
     //printf("DEBUG: solver = %p\n", solver);
     return solver;

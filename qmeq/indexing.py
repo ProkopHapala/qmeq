@@ -58,17 +58,7 @@ def integer_to_binarylist(num, binlen=0, strq=False):
 def construct_chargelst(nsingle):
     """
     Makes list of lists containing Lin indices of the states for given charge.
-
-    Parameters
-    ----------
-    nsingle : int
-        Number of single particle states.
-
-    Returns
-    -------
-    chargelst : list of lists
-        chargelst[charge] gives a list of state indices for given charge,
-        chargelst[charge][ind] gives state index.
+    Also stores state mapping in format [index] binary_state
     """
     verb_print("\nDEBUG: QmeQ construct_chargelst() state ordering:")
     verb_print(f"Number of single particle states (nsingle): {nsingle}")
@@ -77,23 +67,39 @@ def construct_chargelst(nsingle):
     verb_print(f"Total number of many-body states (nmany): {nmany}")
     
     chargelst = [[] for _ in range(nsingle+1)]
-    verb_print(f"Created {nsingle+1} empty lists for charges 0 to {nsingle}")
+    state_mapping = []  # Store state mapping here
     
     # Iterate over many-body states
     verb_print("\nAssigning states to charge sectors:")
     for j1 in range(nmany):
-        state = integer_to_binarylist(j1, nsingle)
-        charge = sum(state)
+        state_bin = integer_to_binarylist(j1, nsingle)
+        charge = sum(state_bin)
         chargelst[charge].append(j1)
-        verb_print(f"State {j1:2d} -> binary {state} -> charge {charge} -> added to chargelst[{charge}]")
+        state_mapping.append(f"[{j1}] {''.join(map(str, state_bin))}")
+        verb_print(f"State {j1:2d} -> binary {state_bin} -> charge {charge} -> added to chargelst[{charge}]")
+    
+    verb_print("\nState mapping:")
+    verb_print("\n".join(state_mapping))
     
     verb_print("\nFinal charge grouping:")
     for charge, states in enumerate(chargelst):
-        if states:  # Only print non-empty charge sectors
+        if states:
             state_strings = [f"{state:0{nsingle}b}" for state in states]
-            verb_print(f"Charge {charge}: states {states} (binary: {state_strings})")
-            
+            print(f"Charge {charge}: states {states} (binary: {state_strings})")
+    
     return chargelst
+
+def get_state_order(chargelst):
+    state_order = []
+    for charge, states in enumerate(chargelst):
+        for state in states: state_order.append(state)
+    return state_order
+
+def get_state_occupancy_strings(chargelst, nsingle):
+    state_strings = []
+    for charge, states in enumerate(chargelst):
+        state_strings += [f"{state:0{nsingle}b}" for state in states]
+    return state_strings
 
 
 def sz_to_ind(sz, charge, nsingle):
@@ -767,7 +773,6 @@ class StateIndexingPauli(StateIndexing):
         """
         Reduce the number of diagonal matrix elements by using symmetries.
         """
-        verb_print("DEBUG: StateIndexingPauli.set_mapdm()")
         # noinspection PyShadowingNames
         def add_elem(counter, b, bp, charge, dictq=True):
             bbp = self.get_ind_dm0(b, bp, charge, maptype=0)

@@ -37,50 +37,11 @@ def work_dir(v__file__):
     """Get directory of the current file"""
     return os.path.dirname(os.path.realpath(v__file__))
 
-'''
 def compile_lib(name, FFLAGS="-std=c++20 -fPIC", LFLAGS="", path=None, clean=True, bASAN=False, bDEBUG=True):
     """Compile a C++ library"""
     lib_ext = '.so'
     lib_name = name + lib_ext
-    
-    if path is not None:
-        dir_bak = os.getcwd()
-        os.chdir(path)
-    
-    print(" COMPILATION OF : " + name)
-    print(os.getcwd())
-    
-    if clean:
-        try:
-            os.remove(lib_name)
-            os.remove(name + ".o")
-        except:
-            pass
 
-    if bDEBUG:
-        FFLAGS += " -g"
-    else:
-        FFLAGS += " -O3"
-    
-    if bASAN:
-        FFLAGS += " -fsanitize=address -fno-omit-frame-pointer"
-        LFLAGS += "-lasan"
-    str1 = f"g++ {FFLAGS} -c -fPIC {name}.cpp -o {name}.o {LFLAGS}"
-    str2 = f"g++ {FFLAGS} -shared -Wl,-soname,{lib_name} -o {lib_name} {name}.o {LFLAGS}"
-    print(str1)
-    print(str2)
-    os.system(str1)
-    os.system(str2)
-    
-    if path is not None:
-        os.chdir(dir_bak)
-'''
-
-def compile_lib(name, FFLAGS="-std=c++20 -fPIC", LFLAGS="", path=None, clean=True, bASAN=False, bDEBUG=True):
-    """Compile a C++ library"""
-    lib_ext = '.so'
-    lib_name = name + lib_ext
-    
     if path is not None:
         dir_bak = os.getcwd()
         os.chdir(path)

@@ -31,13 +31,9 @@ void swap_matrix_cols(double* mat, int nrows, int ncols, int col1, int col2) {
     }
 }
 
-inline static int site_to_state(int site) {
-    return 1 << site;
-}
+inline static int site_to_state(int site) { return 1 << site;}
 
-inline static bool site_in_state(int site, int state) {
-    return (state >> site) & 1;
-}
+inline static bool site_in_state(int site, int state) {  return (state >> site) & 1;}
 
 
 
@@ -45,46 +41,42 @@ inline static bool site_in_state(int site, int state) {
 double calculate_state_energy(int state, int nSingle, const double* Hsingle, double W) {
     //printf("DEBUG calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
     double energy = 0.0;
+    
     // Single-particle energies
     for(int i = 0; i < nSingle; i++) {
         int imask = site_to_state(i);
-        if( state & imask) {
+        if(state & imask) {
             // Access diagonal elements correctly
             energy += Hsingle[i * nSingle + i];
         }
     }
-    //DEBUG
-    // Hopping terms
+    
+    // Hopping terms (t-values)
     for(int i = 0; i < nSingle; i++) {
         int imask = site_to_state(i);
         for(int j = i+1; j < nSingle; j++) {
             int jmask = site_to_state(j);
-            // Check if state i is occupied and state j is empty
-            if( (state & imask) && !(state & jmask) ) {
-                // Fermion sign
-                int fsign = 1;
-                for(int k = i+1; k < j; k++) {
-                    if( (state & site_to_state(k)) ) fsign *= -1;
-                }
-                // Access off-diagonal elements correctly
-                if(i < nSingle && j < nSingle) { // Bounds check
-                    energy += fsign * Hsingle[i * nSingle + j];
-                }
+            // Check if both states are occupied for hopping
+            if((state & imask) && (state & jmask)) {
+                // Add hopping term (off-diagonal elements)
+                energy += Hsingle[i * nSingle + j] + Hsingle[j * nSingle + i];
             }
         }
     }
-    //DEBUG
-    // Coulomb interaction
+    
+    // Coulomb interaction - add W for each pair of occupied sites
     for(int i = 0; i < nSingle; i++) {
         int imask = site_to_state(i);
-        for(int j = i+1; j < nSingle; j++) {
-            int jmask = site_to_state(j);
-            if( (state & imask) && (state & jmask) ) {
-                energy += W;
+        if(state & imask) {
+            for(int j = i+1; j < nSingle; j++) {
+                int jmask = site_to_state(j);
+                if(state & jmask) {
+                    energy += W;
+                }
             }
         }
     }
-    //DEBUG
+    
     return energy;
 }
 
@@ -98,23 +90,46 @@ struct LeadParams {
 
 
 template<typename T> bool _reallocate(T*& ptr, int size) {
-    bool b = ptr != nullptr;
+    bool b = (ptr != nullptr);
     if(b){ delete[] ptr; }
     ptr = new T[size];
     return b;
 }
+
+
+// Calculate number of occupied sites (charge) for a state
+inline static int state_to_charge(int state, int nSingle) {
+    int charge = 0;
+    for(int i = 0; i < nSingle; i++) {
+        if(state & (1 << i)) charge++;
+    }
+    return charge;
+}
+
+// Compare states by charge first, then numerically
+// struct StateComparator {
+//     int nSingle;
+//     StateComparator(int nSingle) : nSingle(nSingle) {}
+//     bool operator()(int a, int b) {
+//         int chargeA = state_to_charge(a, nSingle);
+//         int chargeB = state_to_charge(b, nSingle);
+//         if(chargeA != chargeB) return chargeA < chargeB;
+//         return a < b;
+//     }
+// };
 
 // Parameters for the solver
 struct SolverParams {
     int nSingle;  // Number of single-particle states
     int nstates;  // Number of states
     int nleads;   // Number of leads
-    double* energies;  // State energies [nstates]
-    LeadParams* leads; // Lead parameters [nleads]
-    double* coupling;  // Coupling matrix elements [nleads * nstates * nstates]
+    double* energies=0;  // State energies [nstates]
+    LeadParams* leads=0; // Lead parameters [nleads]
+    double* coupling=0;  // Coupling matrix elements [nleads * nstates * nstates]
+    int* state_order=0;  // State order [nstates]
     
     // Constructor
-    SolverParams() : nSingle(0), nstates(0), nleads(0), energies(nullptr), leads(nullptr), coupling(nullptr) {}
+    SolverParams() : nSingle(0), nstates(0), nleads(0) {}
 
     // Reallocate memory
     void reallocate(int nstates, int nleads) {
@@ -123,6 +138,7 @@ struct SolverParams {
         _reallocate(energies, nstates);
         _reallocate(leads,    nleads);
         _reallocate(coupling, nleads * nstates * nstates);
+        _reallocate(state_order, nstates);
     }
     
     // Copy constructor
@@ -131,12 +147,11 @@ struct SolverParams {
         nstates = other.nstates;
         nleads  = other.nleads;
         // Deep copy arrays
-        energies = new double[nstates];
-        leads    = new LeadParams[nleads];
-        coupling = new double[nleads * nstates * nstates];
+        reallocate(nstates, nleads);
         std::memcpy(energies, other.energies, nstates * sizeof(double));
         std::memcpy(leads,    other.leads,    nleads * sizeof(LeadParams));
         std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
+        std::memcpy(state_order, other.state_order, nstates * sizeof(int));
     }
     
     // Destructor
@@ -144,23 +159,20 @@ struct SolverParams {
         if(energies) delete[] energies;
         if(leads) delete[] leads;
         if(coupling) delete[] coupling;
+        if(state_order) delete[] state_order;
     }
     
     // Assignment operator
     SolverParams& operator=(const SolverParams& other) {
         if (this != &other) {
-            delete[] energies;
-            delete[] leads;
-            delete[] coupling;
             nSingle = other.nSingle;
             nstates = other.nstates;
             nleads  = other.nleads;
-            energies = new double[nstates];
-            leads    = new LeadParams[nleads];
-            coupling = new double[nleads * nstates * nstates];
+            reallocate(nstates, nleads);
             std::memcpy(energies, other.energies, nstates * sizeof(double));
             std::memcpy(leads,    other.leads, nleads * sizeof(LeadParams));
             std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
+            std::memcpy(state_order, other.state_order, nstates * sizeof(int));
         }
         return *this;
     }
@@ -171,8 +183,13 @@ struct SolverParams {
 
     /// Calculate state energies
     void calculate_state_energies(const double* Hsingle, double W) {
-        for(int state = 0; state < nstates; state++) {
-            energies[state] = calculate_state_energy(state, nSingle, Hsingle, W);
+        // NOTE:
+        // is somewhat equivalent to construct_Ea_manybody(), diagonalise() and set_Ea() in /qmeq/qdot.py 
+        //printf("calculate_state_energies W=%f\n", W);
+        for(int i = 0; i < nstates; i++) {
+            int state_idx = state_order[i];
+            energies[i] = calculate_state_energy(state_idx, nSingle, Hsingle, W);
+            //printf("calculate_state_energies() i: %i state %i energy=%g \n", i, state_idx, energies[i] );
         }
     }
 
@@ -211,6 +228,7 @@ struct SolverParams {
         }
     }
 };
+
 
 class PauliSolver {
 public:

@@ -16,10 +16,16 @@ class PauliSolver:
         self.verbosity = verbosity
         
 
-    def _compile_and_load(self):
+    def _compile_and_load(self, name='pauli_solver_wrapper'):
         """Compile and load the C++ library"""
         cpp_dir = os.path.join(work_dir(__file__), 'cpp')
-        compile_lib('pauli_solver_wrapper', path=cpp_dir, clean=True, bASAN=self.bASAN, bDEBUG=True)
+        so_name = name + '.so'
+        # remove pauli_solver_wrapper.so'
+        try:
+            os.remove(os.path.join(cpp_dir, so_name))
+        except:
+            pass
+        compile_lib(name, path=cpp_dir, clean=True, bASAN=self.bASAN, bDEBUG=True)
         
         # When using ASan, ensure it's loaded first
         if self.bASAN:
@@ -28,7 +34,7 @@ class PauliSolver:
             # Load ASan first, then our library
             ctypes.CDLL(asan_lib, mode=ctypes.RTLD_GLOBAL)
             
-        return ctypes.CDLL(os.path.join(cpp_dir, 'pauli_solver_wrapper.so'), mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL(os.path.join(cpp_dir, so_name), mode=ctypes.RTLD_GLOBAL)
         
     def _setup_function_signatures(self):
         """Set up C++ function signatures"""
@@ -41,7 +47,7 @@ class PauliSolver:
         self.lib.create_pauli_solver_new.argtypes = [
             ctypes.c_int, ctypes.c_int, ctypes.c_int,
             c_double_p, ctypes.c_double, c_double_p,
-            c_double_p, c_double_p, c_double_p, ctypes.c_int
+            c_double_p, c_double_p, c_double_p, c_int_p, ctypes.c_int
         ]
         self.lib.create_pauli_solver_new.restype  = ctypes.c_void_p
         
@@ -99,7 +105,7 @@ class PauliSolver:
         )
         return solver
     
-    def create_solver_new(self,  nstates, nleads, Hsingle, W, TLeads, lead_mu, lead_temp, lead_gamma, verbosity=0):
+    def create_pauli_solver_new(self,  nstates, nleads, Hsingle, W, TLeads, lead_mu, lead_temp, lead_gamma, state_order, verbosity=0):
         """Create a new PauliSolver instance
         
         Args:
@@ -118,17 +124,27 @@ class PauliSolver:
         # Ensure arrays are C-contiguous and in the correct format
         #Hsingle    = np.ascontiguousarray(Hsingle,    dtype=np.float64)
         #TLeads     = np.ascontiguousarray(TLeads,     dtype=np.float64)
-        lead_mu    = np.ascontiguousarray(lead_mu,    dtype=np.float64)
-        lead_temp  = np.ascontiguousarray(lead_temp,  dtype=np.float64)
-        lead_gamma = np.ascontiguousarray(lead_gamma, dtype=np.float64)
-        
+        lead_mu     = np.ascontiguousarray(lead_mu,    dtype=np.float64)
+        lead_temp   = np.ascontiguousarray(lead_temp,  dtype=np.float64)
+        lead_gamma  = np.ascontiguousarray(lead_gamma, dtype=np.float64)
+        #state_order = np.ascontiguousarray(state_order, dtype=np.int32)
         nSingle = len(Hsingle)
+        # print("nSingle = ", nSingle)
+        # print("nstates = ", nstates)
+        # print("nleads  = ", nleads)
+        # print("Hsingle = ", Hsingle)
+        # print("TLeads  = ", TLeads)
+        # print("lead_mu = ", lead_mu)
+        # print("lead_temp = ", lead_temp)
+        # print("lead_gamma = ", lead_gamma)
+        # print("state_order = ", state_order)
 
-        # Create solver
+        print("create_pauli_solver_new()")
         solver = self.lib.create_pauli_solver_new(
             nSingle, nstates, nleads,
             _np_as(Hsingle, c_double_p), W, _np_as(TLeads, c_double_p),
             _np_as(lead_mu, c_double_p), _np_as(lead_temp, c_double_p), _np_as(lead_gamma, c_double_p),
+            _np_as(state_order, c_int_p),
             self.verbosity
         )
         return solver
