@@ -607,7 +607,7 @@ public:
         std::copy(kernel, kernel + n * n, kern_copy);
         
         // Print the original kernel matrix for debugging
-        if(verbosity > 0) {
+        if(verbosity > 1) {
             printf("DEBUG  solve_kern() original kernel:\n");
             print_matrix(kernel, n, n, "%18.15f " );
         }
@@ -624,7 +624,7 @@ public:
         rhs[0] = 1.0;
         std::fill(rhs + 1, rhs + n, 0.0);
         
-        if(verbosity > 0) {
+        if(verbosity > 1) {
             printf("DEBUG  solve_kern() modified kernel with normalization row:\n");
             print_matrix(kern_copy, n, n, "%18.15f " );
             printf("DEBUG  solve_kern() rhs: ");
