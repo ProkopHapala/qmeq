@@ -94,49 +94,36 @@ def run_cpp_solver(eps1, eps2, eps3, pauli, solver, NStates):
     pauli.solve(solver)
     return pauli.calculate_current(solver, 1)
 
-def scan_energies(eps_range, solver='both'):
-    """Scan through a range of onsite energies"""
-    results = {'cpp': [], 'qmeq': [], 'eps': eps_range}
-    
-    # Initialize solvers once
-    if solver in ['qmeq', 'both']:
-        qmeq_system = initialize_qmeq_solver()
-    if solver in ['cpp', 'both']:
-        pauli, cpp_solver, NStates = initialize_cpp_solver()
-    
+def scan_QmeQ(eps_range):
+    qmeq_system = initialize_qmeq_solver()
+    res = []
     for eps in eps_range:
-        if solver in ['qmeq', 'both']:
-            qmeq_current = run_qmeq_solver(eps, eps, eps, qmeq_system)
-            results['qmeq'].append(qmeq_current)
-        
-        if solver in ['cpp', 'both']:
-            cpp_current = run_cpp_solver(eps, eps, eps, pauli, cpp_solver, NStates)
-            results['cpp'].append(cpp_current)
-    
-    return results
+        qmeq_current = run_qmeq_solver(eps, eps, eps, qmeq_system)
+        res.append(qmeq_current)
+    return res
 
-def plot_results(results):
-    """Plot comparison of solver results"""
+def scan_cpp(eps_range):
+    pauli, cpp_solver, NStates = initialize_cpp_solver()
+    res = []
+    for eps in eps_range:
+        cpp_current = run_cpp_solver(eps, eps, eps, pauli, cpp_solver, NStates)
+        res.append(cpp_current)
+    return res
+    
+if __name__ == "__main__":
+    # Define energy range
+    eps_range = np.linspace(-10, 10, 10)
+    
+    # Run scan
+    qmeq_results = scan_QmeQ(eps_range)
+    cpp_results  = scan_cpp(eps_range)
+            
     plt.figure(figsize=(10, 6))
-    
-    if results['qmeq']:
-        plt.plot(results['eps'], results['qmeq'], 'b-', label='QmeQ Pauli')
-    if results['cpp']:
-        plt.plot(results['eps'], results['cpp'], 'r--', label='C++ Pauli')
-    
+    plt.plot(eps_range, qmeq_results, 'b-', label='QmeQ Pauli')
+    plt.plot(eps_range, cpp_results, 'r--', label='C++ Pauli')
     plt.xlabel('Onsite Energy (meV)')
     plt.ylabel('Current (nA)')
     plt.title('Solver Comparison for 1D Energy Scan')
     plt.legend()
     plt.grid(True)
     plt.show()
-
-if __name__ == "__main__":
-    # Define energy range
-    eps_range = np.linspace(-20, 20, 50)
-    
-    # Run scan
-    results = scan_energies(eps_range, solver='both')
-    
-    # Plot results
-    plot_results(results)
