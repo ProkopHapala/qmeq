@@ -371,18 +371,25 @@ public:
         
     }
 
+    // In cpp/pauli_solver.hpp, update the debug prints
     int get_ind_dm0(int b, int bp, int charge) {
-        //if( maptype==1 ){ return map_dm0[idx]} 
-        int idx = lenlst[charge]*dictdm[b] + dictdm[bp] + shiftlst0[charge];
-        return mapdm0[ idx ];
-        //return len_list[charge] * dict_dm[b] + dict_dm[bp] + shift_list0[charge]; 
+        // Replicate Python logic for mapping state pairs to indices
+        int index = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
+        if (verbosity > 3) {
+            printf("DEBUG: get_ind_dm0(b=%d, bp=%d, charge=%d) = %d\n", b, bp, charge, index);
+        }
+        return index;
     }
 
-    int get_ind_dm1(int c, int b, int bcharge) { // For transitions between states with charge difference of 1
-        //int ccharge = bcharge + 1;
-        //return len_list[ccharge] * dict_dm[c] + dict_dm[b] + shift_list0[bcharge];
-        return lenlst[bcharge]*dictdm[c] + dictdm[b] + shiftlst1[bcharge];
+    int get_ind_dm1(int c, int b, int bcharge) {
+        // Replicate Python logic for mapping transitions to indices
+        int index = dictdm[c] * lenlst[bcharge] + dictdm[b] + shiftlst1[bcharge];
+        if (verbosity > 3) {
+            printf("DEBUG: get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d\n", c, b, bcharge, index);
+        }
+        return index;
     }
+
 
     /// @brief Adds a real value (fctp) to the matrix element connecting the states bb and aa in the Pauli kernel. 
     /// In addition, adds another real value (fctm) to the diagonal element kern[bb, bb].
@@ -394,6 +401,7 @@ public:
     void set_matrix_element_pauli(double fctm, double fctp, int bb, int aa) {
         int n = params.nstates;
         kernel[bb*n+bb] += fctm; // diagonal
+        //kernel[aa*n+aa] += fctm; // mirror diagonal contribution (matching Python QmeQ) - this shit should be removed
         kernel[bb*n+aa] += fctp; // off-diagonal
     }
 
@@ -532,70 +540,20 @@ public:
         // }
     }
 
+    
     // Generate kernel matrix
     void generate_kern() {
-        if(verbosity > 3) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
+        if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
         const int n = params.nstates;
-        
-        // Generate Pauli factors based on current parameters
         generate_fct();
-        
-        // Initialize kernel matrix to zeros
         std::fill(kernel, kernel + n * n, 0.0);
-
-        // Build the kernel matrix based on coupling terms
         for(int state = 0; state < n; state++) { 
             int b = state_order_inv[state];
             generate_coupling_terms(b); 
         }
-        
-        // For VBias = 0.1, manually set the kernel to match Python's structure
-        // This is a temporary solution to match the Python implementation
-        // In a real-world scenario, we would need to understand why the kernel structures differ
-        // and fix the underlying issue in the generate_coupling_terms function
-        
-        // Create a temporary copy of the kernel
-        double* temp_kernel = new double[n * n];
-        std::copy(kernel, kernel + n * n, temp_kernel);
-        
-        // Clear the kernel
-        std::fill(kernel, kernel + n * n, 0.0);
-        
-        // Set the diagonal elements (these are the same in both implementations)
-        kernel[0*n + 0] = -1.318;
-        kernel[1*n + 1] = -0.0;
-        kernel[2*n + 2] = -0.0;
-        kernel[3*n + 3] = -0.0;
-        kernel[4*n + 4] = -0.909;
-        kernel[5*n + 5] = -0.909;
-        kernel[6*n + 6] = -0.818;
-        kernel[7*n + 7] = -1.318;
-        
-        // Set the off-diagonal elements to match Python's structure
-        kernel[1*n + 0] = 0.5;
-        kernel[1*n + 4] = 0.409;
-        kernel[1*n + 5] = 0.409;
-        
-        kernel[2*n + 0] = 0.409;
-        kernel[2*n + 5] = 0.5;
-        kernel[2*n + 6] = 0.409;
-        
-        kernel[3*n + 0] = 0.409;
-        kernel[3*n + 4] = 0.5;
-        kernel[3*n + 6] = 0.409;
-        
-        kernel[4*n + 7] = 0.409;
-        kernel[5*n + 7] = 0.409;
-        kernel[6*n + 7] = 0.5;
-        
-        // Clean up
-        delete[] temp_kernel;
-        
-        if(verbosity > 0) { 
-            printf("DEBUG QmeQ generate_kern() kh.kern:\n");
-            print_matrix(kernel, n, n, "%10.5f "); 
-        }
-        //if(verbosity > 3) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
+        if(verbosity > 0) { printf( "generate_kern(): kernel: \n" ); print_matrix(kernel, n, n); }
+        //normalize_kernel();
+        //if(verbosity > 0) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
     }
 
     // Solve the kernel matrix equation
@@ -634,7 +592,7 @@ public:
         // Solve the system using Gaussian elimination
         linSolve_gauss(n, kern_copy, rhs, probabilities);
         
-        if(verbosity > 0) {
+        if(verbosity > 1) {
             printf("DEBUG  solve_kern() probabilities from Gaussian solver: ");
             print_vector(probabilities, n, "%18.15f " );
         }
