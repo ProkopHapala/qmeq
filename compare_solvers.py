@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import sys
+sys.stdout = sys.stderr = open(sys.stdout.fileno(), mode='w', buffering=1)
+
 import numpy as np
 from sys import path
 path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
