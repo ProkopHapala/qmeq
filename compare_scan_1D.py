@@ -94,38 +94,51 @@ def run_cpp_solver(eps1, eps2, eps3, pauli, solver, NStates):
     pauli.solve(solver)
     return pauli.calculate_current(solver, 1)
 
-def scan_QmeQ(eps_range, bPrint=False):
+def scan_QmeQ(eps, bPrint=False):
+    if bPrint:
+        print("\n####################################################################")
+        print("scan_QmeQ")
+        print("######################################################################")
     qmeq_system = initialize_qmeq_solver()
     res = []
-    for eps in eps_range:
-        qmeq_current = run_qmeq_solver(eps, eps, eps, qmeq_system)
+    for eps1, eps2, eps3 in eps:
+        qmeq_current = run_qmeq_solver(eps1, eps2, eps3, qmeq_system)
         res.append(qmeq_current)
         if bPrint:
-            print(f"{eps:.2f} {qmeq_current:.2f}")
+            print(f"{eps1:.2f} {eps2:.2f} {eps3:.2f} -> {qmeq_current:.2f}")
     return res
 
-def scan_cpp(eps_range, bPrint=False):
+def scan_cpp(eps, bPrint=False):
+    if bPrint:
+        print("\n####################################################################")
+        print("scan_cpp")
+        print("######################################################################")
     pauli, cpp_solver, NStates = initialize_cpp_solver()
     res = []
-    for eps in eps_range:
-        cpp_current = run_cpp_solver(eps, eps, eps, pauli, cpp_solver, NStates)
+    for eps1, eps2, eps3 in eps:
+        cpp_current = run_cpp_solver(eps1, eps2, eps3, pauli, cpp_solver, NStates)
         res.append(cpp_current)
         if bPrint:
-            print(f"{eps:.2f} {cpp_current:.2f}")
+            print(f"{eps1:.2f} {eps2:.2f} {eps3:.2f} -> {cpp_current:.2f}")
     return res
     
 if __name__ == "__main__":
     # Define energy range
     bPrint = True
-    eps_range = np.linspace(-10, 10, 10)
+    nstep = 10
+    eps = np.zeros( (nstep,3) )
+    ts = np.linspace(0, 1, nstep)
+    eps[:,0] = 0.1+ts
+    eps[:,1] = 0.2+ts
+    eps[:,2] = 0.3+ts
     
     # Run scan
-    qmeq_results = scan_QmeQ(eps_range, bPrint)
-    cpp_results  = scan_cpp(eps_range, bPrint)
+    qmeq_results = scan_QmeQ(eps, bPrint)
+    cpp_results  = scan_cpp(eps, bPrint)
             
     plt.figure(figsize=(10, 6))
-    plt.plot(eps_range, qmeq_results, 'b-', label='QmeQ Pauli')
-    plt.plot(eps_range, cpp_results, 'r--', label='C++ Pauli')
+    plt.plot(ts, qmeq_results, 'b-', label='QmeQ Pauli')
+    plt.plot(ts, cpp_results, 'r--', label='C++ Pauli')
     plt.xlabel('Onsite Energy (meV)')
     plt.ylabel('Current (nA)')
     plt.title('Solver Comparison for 1D Energy Scan')
