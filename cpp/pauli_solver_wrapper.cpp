@@ -1,4 +1,3 @@
-
 static int _verbosity = 0;
 
 #include "pauli_solver.hpp"
@@ -132,6 +131,18 @@ void get_energies(void* solver_ptr, double* out_energies) {
 double calculate_current(void* solver_ptr, int lead_idx) {
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     return solver->generate_current(lead_idx);
+}
+
+// Get the coupling matrix
+double* get_coupling(void* solver_ptr, double* coupling ) {
+    printf("DEBUG: get_coupling() solver_ptr=%p coupling=%p\n", solver_ptr, coupling );
+    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
+    DEBUG
+    int n=solver->params.nleads * solver->params.nstates * solver->params.nstates;
+    DEBUG
+    printf("DEBUG: get_coupling() solver->params.coupling = %p nleads=%i nstates=%i n=%i\n", solver->params.coupling, solver->params.nleads, solver->params.nstates, n);
+    std::memcpy(coupling, solver->params.coupling, n * sizeof(double));
+    return coupling;
 }
 
 // Cleanup

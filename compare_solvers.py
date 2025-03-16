@@ -31,7 +31,7 @@ import traceback
 np.set_printoptions(linewidth=256, suppress=True)
 
 import pauli_solver_lib as psl
-from pauli_solver_lib import PauliSolver, calculate_state_energy, calculate_tunneling_amplitudes
+from pauli_solver_lib import PauliSolver #, calculate_state_energy, calculate_tunneling_amplitudes
 
 # System parameters
 NSingle = 3  # number of impurity states
@@ -120,6 +120,12 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ an
             'energies':       system.Ea,
             'probabilities':  system.phi0,
             'kernel':         system.kern,
+            'leads': {
+                'mu':    system.leads.mulst,
+                'temp':  system.leads.tlst,
+                'gamma': system.leads.dlst[:,0],
+                'Tba':   system.leads.Tba.real
+            }
         }
         #print("\nQmeQ hsingle:", Hsingle)
         #print("QmeQ coulomb:", Hcoulomb)
@@ -145,7 +151,7 @@ def run_cpp_solver(TLeads):
         lead_gamma           = np.array([GammaS, GammaT])
         pauli                = PauliSolver( verbosity=verbosity, bASAN=bASAN )
 
-        TLeads_            = np.zeros( (NLeads, NStates) )
+        TLeads_            = np.zeros( (NLeads, NSingle) )
         for k,v in TLeads.items():
             TLeads_[k[0], k[1]] = v
         Hsingle_ = np.zeros( (NSingle, NSingle) )
@@ -167,6 +173,7 @@ def run_cpp_solver(TLeads):
         kernel               = pauli.get_kernel(solver, NStates)
         probabilities        = pauli.get_probabilities(solver, NStates)
         currents             = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
+        Tba                  = pauli.get_coupling(solver, NLeads, NStates)
         pauli.cleanup(solver)
         
         res = {
@@ -174,6 +181,12 @@ def run_cpp_solver(TLeads):
             'energies':      energies,
             'probabilities': probabilities,
             'kernel':        kernel,
+            'leads': {
+                'mu':    lead_mu,
+                'temp':  lead_temp,
+                'gamma': lead_gamma,
+                'Tba':   Tba
+            }
         }
 
         #print("\nQmeQ hsingle:", Hsingle)
@@ -274,6 +287,25 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True):  # Compare re
         print("Relative diff:", abs(qmeq_res['current'] - cpp_res['current'])/abs(qmeq_res['current']))
     else:
         print(f"Current:   OK (diff({diff}) < tol({tol}))")
+
+    # Compare lead parameters
+    print('\nComparing lead parameters:')
+    for param in ['mu', 'temp', 'gamma']:
+        print(f'  {param}:')
+        print(f'    QmeQ: {qmeq_res["leads"][param]}')
+        print(f'    C++:  {cpp_res["leads"][param]}')
+    print('  Tba:')
+    for lead in range(NLeads):
+        print(f'    Lead {lead}:')
+        Lcpp = cpp_res['leads']['Tba'][lead]
+        Lqmeq = qmeq_res['leads']['Tba'][lead]
+        diff = np.max(np.abs(Lqmeq - Lcpp))
+        if diff > tol or bPrintSame:
+            print("Tba diff:", diff)
+            print("Tba QmeQ:\n", Lqmeq)
+            print("Tba C++:\n", Lcpp)
+        else:
+            print(f"Tba:   OK (diff({diff}) < tol({tol}))")
 
 # ==== Main
 

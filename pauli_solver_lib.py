@@ -68,6 +68,10 @@ class PauliSolver:
         
         self.lib.delete_pauli_solver.argtypes = [ctypes.c_void_p]
         self.lib.delete_pauli_solver.restype  = None
+        
+        self.lib.get_coupling.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_coupling.restype  = None
+        
         #print("PauliSolver::_setup_function_signatures() DONE")
     
     def create_solver(self, nstates, nleads, energies, tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity=0):
@@ -178,6 +182,12 @@ class PauliSolver:
         """Calculate current through a specific lead"""
         return self.lib.calculate_current(solver, lead)
     
+    def get_coupling(self, solver, NLeads, NStates):
+        coupling = np.zeros((NLeads, NStates, NStates))
+        print("get_coupling()", coupling.shape, NLeads*NStates*NStates )
+        self.lib.get_coupling(solver, _np_as(coupling, c_double_p))
+        return coupling
+    
     def cleanup(self, solver):
         """Clean up C++ solver instance"""
         self.lib.delete_pauli_solver(solver)
@@ -186,6 +196,11 @@ def count_electrons(state):
     """Count number of electrons in a state"""
     return bin(state).count('1')
 
+
+'''
+# ==== Deprecated functions ====
+
+#  moved to C++ ( pauli_solver.hpp ) 
 def calculate_state_energy(state, nsingle, eps1, eps2, eps3, W, VBias=0.0, coeffE=0.0, t=0.0):
     """Calculate energy of a given state
     
@@ -265,6 +280,7 @@ def is_valid_transition(state1, state2, site):
                 return False
     return True
 
+#  moved to C++ ( pauli_solver.hpp ) 
 def calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads):
     """Calculate tunneling amplitudes between states using TLeads dictionary format
     
@@ -318,6 +334,7 @@ def calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads):
 
     return tunneling_amplitudes
 
+#  moved to C++ ( pauli_solver.hpp ) 
 def calculate_tunneling_amplitudes_old(nleads, nstates, nsingle, vs, vt, coeff_t):
     """Calculate tunneling amplitudes between states
     
@@ -394,3 +411,6 @@ def calculate_tunneling_amplitudes_old(nleads, nstates, nsingle, vs, vt, coeff_t
     #    print(f"\nLead {lead}:")
     #    print(tunneling_amplitudes[lead])
     return tunneling_amplitudes
+
+
+'''

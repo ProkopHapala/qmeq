@@ -281,7 +281,7 @@ def construct_Tba(leads, tleads, Tba_=None):
                 }
 
                 if(_verbosity > 3) {
-                    printf("DEBUG:  lead %i states %3i -> %3i  Tba %g \n", lead, j1, j2, Tba); 
+                    printf("DEBUG:  lead %i states %3i -> %3i  Tba %g tamp %g \n", lead, j1, j2, Tba, tamp ); 
                     //printf("DEBUG:  lead %i states %d -> %d Gamma: %.6f, Energy diff: %.6f  Tba \n", lead, j1, j2,  leads[lead].gamma, energies[j1] - energies[j2], Tba );
                 }
             }
@@ -292,7 +292,7 @@ def construct_Tba(leads, tleads, Tba_=None):
     void calculate_tunneling_amplitudes(const double* TLeads) {
         for(int lead = 0; lead < nleads; lead++) { eval_lead_coupling( lead, TLeads + lead * nSingle ); }
         if(_verbosity > 3) print_tunneling_amplitudes();
-        exit(0);
+        //exit(0);
     }
 
     void print_tunneling_amplitudes( int l ) {
@@ -898,7 +898,7 @@ public:
 
     // Calculate current through a specific lead
     double generate_current(int lead_idx) {
-        if(verbosity > 3) printf("\nDEBUG: generate_current() lead:%d\n", lead_idx);
+        if(verbosity > 3) printf("\nDEBUG: generate_current() lead: %d this: %p\n", lead_idx, this);
         
         const int n = params.nstates;
         double current = 0.0;
@@ -930,8 +930,7 @@ public:
                     current += fct1 + fct2;
                     
                     if(verbosity > 3) {
-                        printf("DEBUG: generate_current() c:%d b:%d fct1:%.6f fct2:%.6f contrib:%.6f\n",
-                               c, b, fct1, fct2, fct1 + fct2);
+                        printf("DEBUG: generate_current() c:%d b:%d fct1:%.6f fct2:%.6f contrib:%.6f\n", c, b, fct1, fct2, fct1 + fct2);
                     }
                 }
             }
