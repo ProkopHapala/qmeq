@@ -1,3 +1,6 @@
+
+static int _verbosity = 0;
+
 #include "pauli_solver.hpp"
 #include <cstdio>
 #include "print_utils.hpp"
@@ -11,6 +14,8 @@ void* create_pauli_solver(int nstates, int nleads,
                          double* energies, double* tunneling_amplitudes,
                          double* lead_mu, double* lead_temp, double* lead_gamma,
                          int verbosity = 0) {
+    setvbuf(stdout, NULL, _IONBF, 0);  // Disable buffering for stdout
+    _verbosity=verbosity;
     SolverParams params;
     params.nstates = nstates;
     params.nleads = nleads;
@@ -55,6 +60,7 @@ void* create_pauli_solver_new(int nSingle, int nstates, int nleads, double* Hsin
     //printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     //printf("create_pauli_solver_new() nSingle=%i nstates=%i nleads=%i Hsingle=%p W=%f TLeads=%p lead_mu=%p lead_temp=%p lead_gamma=%p state_order=%p\n", nSingle, nstates, nleads, Hsingle, W, TLeads, lead_mu, lead_temp, lead_gamma, state_order);
     //DEBUG
+    _verbosity=verbosity;
     SolverParams params;
     params.nSingle = nSingle;
     params.nstates = nstates;
@@ -77,9 +83,10 @@ void* create_pauli_solver_new(int nSingle, int nstates, int nleads, double* Hsin
     //DEBUG
     //printf("DEBUG: params.energies after calculate_state_energies = %p\n", params.energies);
     // Use nSingle for single-particle states
-    params.calculate_tunneling_amplitudes(nleads, nstates, nSingle, TLeads);
+    params.calculate_tunneling_amplitudes(TLeads);
     //DEBUG
     PauliSolver* solver = new PauliSolver(params, verbosity);
+    
     //DEBUG
     //printf("DEBUG: solver->params.energies after constructor = %p\n", solver->params.energies);
     //printf("DEBUG: solver = %p\n", solver);

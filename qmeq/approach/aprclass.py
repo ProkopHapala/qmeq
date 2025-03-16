@@ -25,7 +25,7 @@ class Approach(object):
         LeadsTunneling object.
     si : StateIndexingDM
         StateIndexingDM object.
-    kern : array
+    kern : arraycompare_solvers.py
         Kernel (Liouvillian) representing the master equation.
     bvec : array
         Right hand side column vector for master equation.
@@ -139,6 +139,7 @@ class Approach(object):
         return self.si.ndm0r
 
     def prepare_kern(self):
+        print('prepare_kern()')
         if self.is_prepared and not self.si.states_changed:
             self.clean_arrays()
             return
@@ -233,6 +234,7 @@ class Approach(object):
                 self.norm_vec[bb] += 1
 
     def generate_fct(self):
+        print("Approach.generate_fct()")
         pass
 
     def generate_kern(self):
@@ -244,6 +246,8 @@ class Approach(object):
         kern : array
             (Modifies) Kernel matrix for 1vN approach.
         """
+
+        print("Approach.generate_kern()")
 
         E = self.qd.Ea
         si, kh = self.si, self.kernel_handler
@@ -308,7 +312,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        verb_print( f"########### DEBUG: Approach.solve_kern()  ", self.funcp.solmethod )
+        print( f"########### DEBUG: Approach.solve_kern()  ", self.funcp.solmethod )
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -408,16 +412,23 @@ class Approach(object):
         currentq : bool
             Calculate the current.
         """
-        verb_print("DEBUG: Approach.solve()")
+        print("DEBUG: Approach.solve()")
+        print( " solve() type(self).__name__ ",  type(self).__name__)
+        #print(f" solve() self.__file__: {self.__file__}") 
 
         if qdq:
+            print("DEBUG: Approach.solve() qdq")
             self.qd.diagonalise()
             if rotateq:
                 self.rotate()
         #
         if masterq:
+            print("DEBUG: Approach.solve() masterq")
             self.prepare_kern()
+            print("DEBUG : Approach.solve() after prepare_kern()")
             self.generate_fct()
+            print("DEBUG : Approach.solve() after generate_fct()")    
+
             if not self.funcp.mfreeq:
                 self.generate_kern()
                 self.solve_kern()

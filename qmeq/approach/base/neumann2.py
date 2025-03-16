@@ -107,6 +107,7 @@ class Approach2vN(ApproachBase2vN):
     #region Preparation
 
     def prepare_kern(self):
+        print("Approach2vN.prepare_kern()")
         if self.is_zeroth_iteration:
             self.prepare_energy_grid()
             self.prepare_distribution()

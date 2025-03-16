@@ -41,6 +41,9 @@ class Approach1vN(Approach):
         phi1fct_energy : array
             (Modifies) Factors used to calculate energy and heat currents in 1vN, Redfield approaches.
         """
+
+        print("Approach1vN.generate_fct():")
+
         E, si = self.qd.Ea, self.si,
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
         itype, limit = self.funcp.itype, self.funcp.dqawc_limit

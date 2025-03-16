@@ -16,7 +16,9 @@ sys.stdout = sys.stderr = open(sys.stdout.fileno(), mode='w', buffering=1)
 
 import numpy as np
 from sys import path
-path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
+#path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
+
+
 
 import qmeq
 from qmeq import indexing as qmqsi
@@ -61,7 +63,7 @@ coeffE = 0.4
 coeffT = 0.3
 
 
-verbosity = 1
+verbosity = 4
 
 # ==== Functions
 
@@ -104,7 +106,10 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ an
         system = qmeq.Builder(NSingle, Hsingle, Hcoulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='solve', mfreeq=0)
         system.appr.verbosity = verbosity  # Set verbosity after instance creation
         system.verbosity = verbosity
+        print( "type(system).__name__ ", type(system).__name__)
+        #print(f"system.appr.__file__: {system.appr.__file__}")
         system.solve()
+        
 
         chargelst = system.si.chargelst
         state_order = qmqsi.get_state_order(chargelst); print("QmeQ state order:", state_order)
@@ -147,7 +152,7 @@ def run_cpp_solver(TLeads):
         for k,v in Hsingle.items():
             Hsingle_[k[0], k[1]] = v
 
-        print("\nHsingle:");         print(Hsingle_)
+        print("\nHsingle:");        print(Hsingle_)
         print("\nTLeads:");         print(TLeads_)
 
         #state_order = [0, 1, 2, 4, 3, 5, 6, 7]
@@ -279,6 +284,7 @@ if __name__ == "__main__":
     print( "hsingle:\n", Hsingle)
     print( "coulomb:\n", Hcoulomb)
 
-    cpp_res  = run_cpp_solver(TLeads)
+    
     qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
+    cpp_res  = run_cpp_solver(TLeads)
     compare_results(qmeq_res, cpp_res)

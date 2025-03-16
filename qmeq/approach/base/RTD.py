@@ -253,6 +253,8 @@ class ApproachPyRTD(Approach):
         paulifct : array
             (Modifies) Factors used for generating Pauli master equation kernel.
         """
+        print('ApproachRTD.generate_fct()')
+
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
         ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm

@@ -28,7 +28,7 @@ class ApproachPauli(Approach):
         """
         Approach.__init__(self, qd)
         self.paulifct = np.zeros((self.si.nleads, self.si.ndm1, 2), dtype=float)
-        self.verbosity = 0  # Add verbosity control
+        self.verbosity = 4  # Add verbosity control
 
     def get_kern_size(self):
         return self.si.npauli
@@ -46,6 +46,10 @@ class ApproachPauli(Approach):
         """
         Make factors used for generating Pauli master equation kernel.
         """
+
+        print("ApproachPauli.generate_fct(self):")
+        #exit()
+
         if self.verbosity > 3:
             print("\nDEBUG: ApproachPauli::generate_fct() in ", __file__)
             print("\nDEBUG: QmeQ inputs:")
@@ -96,6 +100,7 @@ class ApproachPauli(Approach):
         kern : array
             (Modifies) Kernel matrix for Pauli master equation.
         """
+        print("ApproachPauli.generate_kern()")
         if self.verbosity > 3:
             print("\nDEBUG: generate_kern() Building kernel matrix...")
             
@@ -133,9 +138,11 @@ class ApproachPauli(Approach):
             np.set_printoptions(precision=5)  # Reset to default
 
     def generate_coupling_terms(self, b, bp, bcharge):
+        print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}", self.verbosity)
         """Generate coupling terms for the Pauli master equation."""
+        verb = 3
         #if self.verbosity > 3:  print(f"\nDEBUG: generate_coupling_terms() state b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
-        verb_print(f"\nQmeQ pauli.py ======== generate_coupling_terms() state b: {b} Q: {bcharge}")
+        if self.verbosity > verb:  print(f"\nQmeQ pauli.py ======== generate_coupling_terms() state b: {b} Q: {bcharge}")
             
         #debug_print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
         Approach.generate_coupling_terms(self, b, bp, bcharge)
@@ -152,34 +159,34 @@ class ApproachPauli(Approach):
         bb = si.get_ind_dm0(b, b, bcharge)
         
         # Handle transitions from lower charge states
-        verb_print(f"generate_coupling_terms() Q-1 states: ", statesdm[acharge] )
+        if self.verbosity > verb:  print(f"generate_coupling_terms() Q-1 states: ", statesdm[acharge] )
         for a in statesdm[acharge]:   # Loop over states with charge acharge = bcharge-1
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
-            #if self.verbosity > 3:  print(f"DEBUG: Lower: state:{b} other:{a} aa:{aa} ba:{ba}")
+            if self.verbosity > verb:  print(f"DEBUG: Lower: state:{b} other:{a} aa:{aa} ba:{ba}")
             fctm, fctp = 0, 0
             for l in range(nleads):
                 #if self.verbosity > 3:  print(f"DEBUG:   lead:{l} idx:{l},{ba}")
                 fctm -= paulifct[l, ba, 1]  # Electron leaving
                 fctp += paulifct[l, ba, 0]  # Electron entering
-            verb_print("LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
+            #verb_print("LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, aa)
-            #if self.verbosity > 3:   print(f"DEBUG: generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
+            if self.verbosity > verb:   print(f"DEBUG: generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
         
         # Handle transitions to higher charge states
-        verb_print(f"generate_coupling_terms() Q+1 states", statesdm[ccharge] )
+        if self.verbosity > verb:  print(f"generate_coupling_terms() Q+1 states", statesdm[ccharge] )
         for c in statesdm[ccharge]: # Loop over states with charge ccharge = bcharge+1
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
-            #if self.verbosity > 3: print(f"DEBUG: Higher: state:{b} other:{c} cc:{cc} cb:{cb}")
+            if self.verbosity > verb: print(f"DEBUG: Higher: state:{b} other:{c} cc:{cc} cb:{cb}")
             fctm, fctp = 0, 0
             for l in range(nleads):
                 #if self.verbosity > 3: print(f"DEBUG:   lead:{l} idx:{l},{cb}")
                 fctm -= paulifct[l, cb, 0]  # Electron entering
                 fctp += paulifct[l, cb, 1]  # Electron leaving
-            verb_print("HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
+            #verb_print("HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
-            #if self.verbosity > 3: print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
+            if self.verbosity > verb: print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
 
         #if self.verbosity > 3: print(f"DEBUG: generate_coupling_terms() in {__file__}, kh.kern:\n", kh.kern)
 

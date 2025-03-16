@@ -35,6 +35,9 @@ class ApproachLindblad(Approach):
         tLba : array
             (Modifies) Jump operator matrix in many-body basis.
         """
+
+        print("ApproachLindblad.generate_fct(self):")
+
         Tba, E, si = self.leads.Tba, self.qd.Ea, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
         itype = self.funcp.itype

@@ -36,12 +36,46 @@ inline static int site_to_state(int site) { return 1 << site;}
 inline static bool site_in_state(int site, int state) {  return (state >> site) & 1;}
 
 
-
-// New method to calculate state energy using single-particle Hamiltonian
+/*
+=== Function calculate_state_energy ====
+should reproduce construct_Ea_manybody from  QmeQ construct_Ea_manybody() in /qmeq/qdot.py
+def construct_Ea_manybody(valslst, si):
+    Ea = np.zeros(si.nmany, dtype=float)
+    if si.indexing == 'sz':
+        # Iterate over charges
+        for charge in range(si.ncharge):
+            # Iterate over spin projection sz
+            for sz in szrange(charge, si.nsingle):
+                # Iterate over many-body states for given charge and sz
+                szind = sz_to_ind(sz, charge, si.nsingle)
+                for ind in range(len(si.szlst[charge][szind])):
+                    # The mapping of many-body states is according to szlst
+                    Ea[si.szlst[charge][szind][ind]] = valslst[charge][szind][ind]
+    elif si.indexing == 'ssq':
+        # Iterate over charges
+        for charge in range(si.ncharge):
+            # Iterate over spin projection sz
+            for sz in szrange(charge, si.nsingle):
+                szind = sz_to_ind(sz, charge, si.nsingle)
+                # Iterate over total spin ssq
+                for ssq in ssqrange(charge, sz, si.nsingle):
+                    ssqind = ssq_to_ind(ssq, sz)
+                    # Iterate over many-body states for given charge, sz, and ssq
+                    for ind in range(len(si.ssqlst[charge][szind][ssqind])):
+                        # The mapping of many-body states is according to ssqlst
+                        Ea[si.ssqlst[charge][szind][ssqind][ind]] = valslst[charge][szind][ssqind][ind]
+    else:
+        # Iterate over charges
+        for charge in range(si.ncharge):
+            # Iterate over many-body states for given charge
+            for ind in range(len(si.chargelst[charge])):
+                # The mapping of many-body states is according to chargelst
+                Ea[si.chargelst[charge][ind]] = valslst[charge][ind]
+    return Ea
+*/
 double calculate_state_energy(int state, int nSingle, const double* Hsingle, double W) {
     //printf("DEBUG calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
     double energy = 0.0;
-    
     // Single-particle energies
     for(int i = 0; i < nSingle; i++) {
         int imask = site_to_state(i);
@@ -50,7 +84,6 @@ double calculate_state_energy(int state, int nSingle, const double* Hsingle, dou
             energy += Hsingle[i * nSingle + i];
         }
     }
-    
     // Hopping terms (t-values)
     for(int i = 0; i < nSingle; i++) {
         int imask = site_to_state(i);
@@ -63,7 +96,6 @@ double calculate_state_energy(int state, int nSingle, const double* Hsingle, dou
             }
         }
     }
-    
     // Coulomb interaction - add W for each pair of occupied sites
     for(int i = 0; i < nSingle; i++) {
         int imask = site_to_state(i);
@@ -76,7 +108,6 @@ double calculate_state_energy(int state, int nSingle, const double* Hsingle, dou
             }
         }
     }
-    
     return energy;
 }
 
@@ -193,40 +224,103 @@ struct SolverParams {
         }
     }
 
-    /// Calculate tunneling amplitudes between states
-    void calculate_tunneling_amplitudes(int NLeads, int NStates, int NSingle, const double* TLeads) {
-        // Initialize matrix
-        coupling = new double[NLeads * NStates * NStates];
-        memset(coupling, 0, NLeads * NStates * NStates * sizeof(double));
+/*
+=== Function eval_lead_coupling ====
+should reproduce construct_Tba from QmeQ /home/prokophapala/git/qmeq/qmeq/leadstun.py
+def construct_Tba(leads, tleads, Tba_=None):
+    si, mtype = leads.si, leads.mtype
+    if Tba_ is None:
+        Tba = np.zeros((si.nleads, si.nmany, si.nmany), dtype=mtype)
+    else:
+        Tba = Tba_
+    # Iterate over many-body states
+    for j1 in range(si.nmany):
+        state = si.get_state(j1)
+        # Iterate over single particle states
+        for j0 in tleads:
+            (j3, j2), tamp = j0, tleads[j0]
+            # Calculate fermion sign for added/removed electron in a given state
+            fsign = np.power(-1, sum(state[0:j2]))
+            if state[j2] == 0:
+                statep = list(state)
+                statep[j2] = 1
+                ind = si.get_ind(statep)
+                if ind is None:
+                    continue
+                Tba[j3, ind, j1] += fsign*tamp
+            else:
+                statep = list(state)
+                statep[j2] = 0
+                ind = si.get_ind(statep)
+                if ind is None:
+                    continue
+                Tba[j3, ind, j1] += fsign*np.conj(tamp)
+    return Tba
+*/
 
-        // Iterate over all many-body states
-        for(int j1 = 0; j1 < NStates; j1++) {
-            // Get binary representation
+    void eval_lead_coupling(int lead, const double* TLead) {
+        if(_verbosity > 3) printf("DEBUG: SolverParams::eval_lead_coupling() Lead %i \n", lead);
+
+        double* coupling_ = coupling + lead * nstates * nstates;
+        for(int j1 = 0; j1 < nstates; j1++) {
             int state = j1;
-            
-            // Iterate over single-particle states
-            for(int j2 = 0; j2 < NSingle; j2++) {
-                // Calculate fermion sign
+            for(int j2 = 0; j2 < nSingle; j2++) {
                 int fsign = 1;
                 for(int k = 0; k < j2; k++) {
                     if((state >> k) & 1) fsign *= -1;
                 }
 
-                // Process each lead
-                for(int lead = 0; lead < NLeads; lead++) {
-                    double tamp = TLeads[lead * NSingle + j2];
-                    
-                    if(!((state >> j2) & 1)) {  // Add electron
-                        int ind = state | (1 << j2);
-                        coupling[lead * NStates * NStates + ind * NStates + j1] = fsign * tamp;
-                    } else {  // Remove electron
-                        int ind = state & ~(1 << j2);
-                        coupling[lead * NStates * NStates + ind * NStates + j1] = fsign * tamp; // Assuming real amplitudes
-                    }
+                double tamp = TLead[j2];
+                double Tba = fsign * tamp;
+                if(!((state >> j2) & 1)) {  // Add electron
+                    int ind = state | (1 << j2);
+                    coupling_[ind * nstates + j1] = Tba;
+                } else {  // Remove electron
+                    int ind = state & ~(1 << j2);
+                    coupling_[ind * nstates + j1] = Tba;
+                }
+
+                if(_verbosity > 3) {
+                    printf("DEBUG:  lead %i states %3i -> %3i  Tba %g \n", lead, j1, j2, Tba); 
+                    //printf("DEBUG:  lead %i states %d -> %d Gamma: %.6f, Energy diff: %.6f  Tba \n", lead, j1, j2,  leads[lead].gamma, energies[j1] - energies[j2], Tba );
                 }
             }
         }
     }
+
+    /// Calculate tunneling amplitudes between states
+    void calculate_tunneling_amplitudes(const double* TLeads) {
+        for(int lead = 0; lead < nleads; lead++) { eval_lead_coupling( lead, TLeads + lead * nSingle ); }
+        if(_verbosity > 3) print_tunneling_amplitudes();
+        exit(0);
+    }
+
+    void print_tunneling_amplitudes( int l ) {
+        printf("SolverParams::print_tunneling_amplitudes() Lead %i :\n", l);
+        for(int i = 0; i < nstates; i++) {
+            printf("[");
+            for(int j = 0; j < nstates; j++) {
+                printf("%10.8f ", coupling[l * nstates * nstates + i * nstates + j]);
+            }
+            printf("]\n  ");
+        }
+        printf("]\n");
+    }
+    void print_tunneling_amplitudes() {  for(int l = 0; l < nleads; l++) {  print_tunneling_amplitudes(l); }}
+
+    void print_state_energies() {
+        printf("SolverParams::print_state_energies(): ");
+        for(int i = 0; i < nstates; i++) { printf("%8.6f ", energies[i]); }
+        printf("\n");
+    }
+
+    void print_lead_params() {
+        printf("SolverParams::print_lead_params(): ");
+        for(int l = 0; l < nleads; l++) {  
+            printf("Lead %i mu: %8.6f temp: %8.6f gamma: %8.6f \n", l, leads[l].mu, leads[l].temp, leads[l].gamma);
+        }
+    }
+
 };
 
 
@@ -438,7 +532,7 @@ public:
                         double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
                         
                         // Store in compact format
-                        pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 0] = coupling_val * fermi * 2 * PI;
+                        pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 0] = coupling_val *        fermi  * 2 * PI;
                         pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 1] = coupling_val * (1.0 - fermi) * 2 * PI;
                     }
                 }
@@ -448,7 +542,25 @@ public:
 
     // Generate Pauli factors for transitions between states
     void generate_fct() {
-        if(verbosity > 3) printf( "\nDEBUG: PauliSolver::%s %s \n", __func__, __FILE__);
+        if(verbosity > 3) {
+            printf("\nDEBUG: generate_fct() in %s\n", __FILE__);
+            params.print_lead_params();
+            params.print_state_energies();
+            params.print_tunneling_amplitudes();
+    
+            // Print states by charge
+            printf("Number of charge states: %zu\n", states_by_charge.size());
+            printf("States by charge (statesdm): [");
+            for(const auto& states : states_by_charge) {
+                printf("[");
+                for(size_t i = 0; i < states.size(); i++) {
+                    printf("%d", states[i]);
+                    if(i < states.size() - 1) printf(", ");
+                }
+                printf("], ");
+            }
+            printf("]\n");
+        }
         
         const int n  = params.nstates;
         const int n2 = n * n;
@@ -456,8 +568,6 @@ public:
         
         // Make sure states are organized by charge
         if(states_by_charge.empty()) { init_states_by_charge();}
-        
-        if(verbosity > 3) printf( "\nDEBUG: PauliSolver::%s %s \n", __func__, __FILE__);
         // Iterate through charge states (like Python's implementation)
         for(int charge = 0; charge < states_by_charge.size() - 1; charge++) {
             int next_charge = charge + 1;
@@ -485,7 +595,7 @@ public:
                         
                         // Store factors for both directions
                         // Note: Python's func_pauli multiplies by 2π and coupling already includes gamma/π
-                        pauli_factors[idx + 0] = coupling_val * fermi * 2 * PI;         // Forward
+                        pauli_factors[idx + 0] = coupling_val *        fermi  * 2 * PI; // Forward
                         pauli_factors[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI; // Backward
                         
                         if(verbosity > 3){
@@ -539,13 +649,25 @@ public:
     inline int index_paulifct_compact(int l, int i       ){ return 2*( i + ndm1*l); }
 
     void generate_coupling_terms(int b) {
-        //if(verbosity > 3){ printf("#\n ======== generate_coupling_terms() b: %i \n", b ); }
         const int n = params.nstates;
         int Q = count_electrons(b);
-        //const int bb = b * n + b;
         const int bb = b;
 
-        if(verbosity > 3){  printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
+        if(verbosity > 3) {
+            printf("\nDEBUG: ApproachPauli.generate_coupling_terms() b: %d Q: %d\n", b, Q);
+            printf("DEBUG: ApproachPauli.generate_coupling_terms() b: %d bp: %d  bcharge: %d statesdm: ", b, b, Q);
+            printf("[");
+            for(const auto& states : states_by_charge) {
+                printf("[");
+                for(size_t i = 0; i < states.size(); i++) {
+                    printf("%d", states[i]);
+                    if(i < states.size() - 1) printf(", ");
+                }
+                printf("], ");
+            }
+            printf("[]]\n");
+            printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q);
+        }
 
         int n2 = n * n;
 
@@ -562,10 +684,19 @@ public:
                 
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
-                    //int idx = l * n2 * 2 + b * n * 2 + a * 2;
                     int idx = index_paulifct( l, b, a);
-                    fctm -= pauli_factors[idx + 1];
-                    fctp += pauli_factors[idx + 0];
+                    double factor_m = pauli_factors[idx + 1];
+                    double factor_p = pauli_factors[idx + 0];
+                    fctm -= factor_m;
+                    fctp += factor_p;
+                    
+                    if(verbosity > 3) {
+                        double energy_diff = params.energies[b] - params.energies[a];
+                        double coupling_val = params.coupling[l * n2 + a * n + b] * params.coupling[l * n2 + b * n + a];
+                        double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
+                        printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
+                               l, b, a, energy_diff, coupling_val, fermi, factor_p, factor_m);
+                    }
                 }
                 //int aa = a * n + a;
                 
@@ -584,10 +715,19 @@ public:
                 //int cb = si.get_ind_dm1(c, b, Q       );
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
-                    //int idx = l * n2 * 2 + c * n * 2 + b * 2;
                     int idx = index_paulifct( l, c, b );
-                    fctm -= pauli_factors[idx + 0];
-                    fctp += pauli_factors[idx + 1];
+                    double factor_m = pauli_factors[idx + 0];
+                    double factor_p = pauli_factors[idx + 1];
+                    fctm -= factor_m;
+                    fctp += factor_p;
+                    
+                    if(verbosity > 3) {
+                        double energy_diff = params.energies[c] - params.energies[b];
+                        double coupling_val = params.coupling[l * n2 + b * n + c] * params.coupling[l * n2 + c * n + b];
+                        double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
+                        printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
+                               l, c, b, energy_diff, coupling_val, fermi, factor_m, factor_p);
+                    }
                 }
                 //int cc = c * n + c;
                 
@@ -673,7 +813,7 @@ public:
     
     // Generate kernel matrix
     void generate_kern() {
-        //if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
+        if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
         const int n = params.nstates;
         generate_fct();
         std::fill(kernel, kernel + n * n, 0.0);
@@ -681,7 +821,10 @@ public:
             int b = state_order_inv[state];
             generate_coupling_terms(b); 
         }
-        if(verbosity > 1) { printf( "generate_kern(): kernel: \n" ); print_matrix(kernel, n, n); }
+        if(verbosity > 1) { 
+            printf("DEBUG generate_kern() kh.kern:\n");
+            print_matrix(kernel, n, n);
+        }
         //normalize_kernel();
         //if(verbosity > 0) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
     }
@@ -804,3 +947,4 @@ public:
     const double* get_rhs()           const { return rhs; }
     const double* get_pauli_factors() const { return pauli_factors; }
 };
+
