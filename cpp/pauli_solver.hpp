@@ -260,29 +260,38 @@ def construct_Tba(leads, tleads, Tba_=None):
 
     void eval_lead_coupling(int lead, const double* TLead) {
         if(_verbosity > 3) printf("DEBUG: SolverParams::eval_lead_coupling() Lead %i \n", lead);
-
         double* coupling_ = coupling + lead * nstates * nstates;
         for(int j1 = 0; j1 < nstates; j1++) {
             int state = j1;
             for(int j2 = 0; j2 < nSingle; j2++) {
+                // Reverse bit mapping to match QmeQ convention
+                int site = nSingle - 1 - j2;
+                
+                // Calculate fermionic sign based on QmeQ convention
+                // In QmeQ: fsign = (-1)^sum(state[0:j2])
+                // We need to count occupied states in positions 0 to j2-1 (in QmeQ indexing)
+                // This corresponds to positions (nSingle-1) down to (nSingle-j2) in C++ indexing
                 int fsign = 1;
-                for(int k = 0; k < j2; k++) {
+                for(int k = nSingle-1; k > nSingle-1-j2; k--) {
                     if((state >> k) & 1) fsign *= -1;
                 }
 
-                double tamp = TLead[j2];
-                double Tba = fsign * tamp;
-                if(!((state >> j2) & 1)) {  // Add electron
-                    int ind = state | (1 << j2);
-                    coupling_[ind * nstates + j1] = Tba;
+                double tamp = TLead[j2]; // Keep j2 for TLead access (not reversed)
+                double dTba = fsign * tamp;
+                
+                // Check if site is occupied using reversed bit position
+                if(!((state >> site) & 1)) {  // Add electron
+                    int ind = state | (1 << site);
+                    coupling_[ind * nstates + j1] += dTba;
+                    if(_verbosity > 3) { 
+                        printf("DEBUG: add_e lead %i states %3i -> %3i  |  site %3i ind %3i dTba %g tamp %g fsign %i\n", lead, j1, j2, site, ind, dTba, tamp, fsign ); 
+                    }
                 } else {  // Remove electron
-                    int ind = state & ~(1 << j2);
-                    coupling_[ind * nstates + j1] = Tba;
-                }
-
-                if(_verbosity > 3) {
-                    printf("DEBUG:  lead %i states %3i -> %3i  Tba %g tamp %g \n", lead, j1, j2, Tba, tamp ); 
-                    //printf("DEBUG:  lead %i states %d -> %d Gamma: %.6f, Energy diff: %.6f  Tba \n", lead, j1, j2,  leads[lead].gamma, energies[j1] - energies[j2], Tba );
+                    int ind = state & ~(1 << site);
+                    coupling_[ind * nstates + j1] += dTba;
+                    if(_verbosity > 3) { 
+                        printf("DEBUG: sub_e lead %i states %3i -> %3i  |  site %3i ind %3i dTba %g tamp %g fsign %i\n",  lead, j1, j2, site, ind, dTba, tamp, fsign ); 
+                    }
                 }
             }
         }
@@ -290,8 +299,12 @@ def construct_Tba(leads, tleads, Tba_=None):
 
     /// Calculate tunneling amplitudes between states
     void calculate_tunneling_amplitudes(const double* TLeads) {
-        for(int lead = 0; lead < nleads; lead++) { eval_lead_coupling( lead, TLeads + lead * nSingle ); }
+        // Process all leads to match QmeQ behavior
+        for(int lead = 0; lead < nleads; lead++) {
+            eval_lead_coupling(lead, TLeads + lead * nSingle);
+        }
         if(_verbosity > 3) print_tunneling_amplitudes();
+        exit(0);
         //exit(0);
     }
 
@@ -694,8 +707,7 @@ public:
                         double energy_diff = params.energies[b] - params.energies[a];
                         double coupling_val = params.coupling[l * n2 + a * n + b] * params.coupling[l * n2 + b * n + a];
                         double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
-                        printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
-                               l, b, a, energy_diff, coupling_val, fermi, factor_p, factor_m);
+                        printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n",  l, b, a, energy_diff, coupling_val, fermi, factor_p, factor_m);
                     }
                 }
                 //int aa = a * n + a;

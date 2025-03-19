@@ -12,6 +12,8 @@ from .indexing import ssq_to_ind
 
 from .wrappers.mytypes import doublenp
 
+from .config import verb_print_
+
 
 def construct_Tba(leads, tleads, Tba_=None):
     """
@@ -40,28 +42,40 @@ def construct_Tba(leads, tleads, Tba_=None):
         Tba = np.zeros((si.nleads, si.nmany, si.nmany), dtype=mtype)
     else:
         Tba = Tba_
+    verb_print_(2, "DEBUG: construct_Tba() tleads:\n", tleads )
+
     # Iterate over many-body states
     for j1 in range(si.nmany):
         state = si.get_state(j1)
         # Iterate over single particle states
         for j0 in tleads:
-            (j3, j2), tamp = j0, tleads[j0]
+            (lead, j2), tamp = j0, tleads[j0]
             # Calculate fermion sign for added/removed electron in a given state
             fsign = np.power(-1, sum(state[0:j2]))
+
+            blead = (lead!=1)*100
+
             if state[j2] == 0:
                 statep = list(state)
                 statep[j2] = 1
                 ind = si.get_ind(statep)
                 if ind is None:
                     continue
-                Tba[j3, ind, j1] += fsign*tamp
+                dTba = fsign*tamp
+                Tba[lead, ind, j1] += dTba
+                verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i  |  ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
             else:
                 statep = list(state)
                 statep[j2] = 0
                 ind = si.get_ind(statep)
                 if ind is None:
                     continue
-                Tba[j3, ind, j1] += fsign*np.conj(tamp)
+                dTba = fsign*np.conj(tamp)
+                Tba[lead, ind, j1] += dTba
+                verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i   | ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
+            #verb_print_(2, "DEBUG:  lead %i states %3i -> %3i    ind %3i Tba %g tamp %g \n", j3, j1, j2,   ind, Tba[j3, ind, j1], tamp*fsign)
+    verb_print_(2, "DEBUG: construct_Tba() Tba:\n", Tba.real)
+    raise ValueError("DEBUG TERMINATION")
     return Tba
 
 

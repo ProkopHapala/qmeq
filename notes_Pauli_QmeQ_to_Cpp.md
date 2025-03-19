@@ -90,3 +90,17 @@ Energies of 8 = 2^3 many-body states are calculated properly. Now we need to inv
 - C++:
   - `generate_current()` (`pauli_solver.hpp`) is equivalent of QmeQ `ApproachPauli.generate_current()`
 
+### 7. State Ordering
+
+- QmeQ:
+  - States ordered by charge first, then by energy
+  - Uses `si.statesdm` for charge-based grouping
+  - Example order: `[0, 1, 2, 4, 3, 5, 6, 7]`
+
+- C++:
+  - Currently uses numerical ordering by binary state value
+  - Should implement charge-based sorting similar to QmeQ
+  - Requires modifying `SolverParams` constructor to:
+    1. Group states by charge
+    2. Sort within charge groups by energy
+    3. Maintain original QmeQ ordering for matrix compatibility

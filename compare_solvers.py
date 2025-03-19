@@ -21,6 +21,7 @@ from sys import path
 
 
 import qmeq
+from qmeq import config
 from qmeq import indexing as qmqsi
 #from qmeq.indexing import get_state_order
 import traceback
@@ -103,12 +104,17 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ an
         print( "######################################################################" )
         print( "\n### Running QmeQ Pauli solver /home/prokop/git_SW/qmeq/qmeq/approach/base/pauli.py " )
         
-        system = qmeq.Builder(NSingle, Hsingle, Hcoulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='solve', mfreeq=0)
-        system.appr.verbosity = verbosity  # Set verbosity after instance creation
-        system.verbosity = verbosity
-        print( "type(system).__name__ ", type(system).__name__)
-        #print(f"system.appr.__file__: {system.appr.__file__}")
-        system.solve()
+        try:
+            config.verbosity = verbosity
+            system = qmeq.Builder(NSingle, Hsingle, Hcoulomb, NLeads, TLeads, mu_L, Temp_L, DBand,   kerntype='Pauli', indexing='Lin', itype=0, symq=True,   solmethod='solve', mfreeq=0)
+            system.appr.verbosity = verbosity  # Set verbosity after instance creation
+            system.verbosity = verbosity
+            print( "type(system).__name__ ", type(system).__name__)
+            #print(f"system.appr.__file__: {system.appr.__file__}")
+            system.solve()
+        except Exception as e:
+            print(f"Error running QmeQ solver: {e}")
+            return None
         
 
         chargelst = system.si.chargelst
@@ -319,4 +325,4 @@ if __name__ == "__main__":
     
     qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
     cpp_res  = run_cpp_solver(TLeads)
-    compare_results(qmeq_res, cpp_res)
+    #compare_results(qmeq_res, cpp_res)
