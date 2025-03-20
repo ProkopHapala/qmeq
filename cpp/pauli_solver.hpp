@@ -362,11 +362,16 @@ public:
         return __builtin_popcount(state);
     }
 
-    void count_valid_transitions() {
-        ndm1 = 0;
+    int count_valid_transitions() {
+        if(verbosity > 3) printf("PauliSolver::count_valid_transitions() states_by_charge.size() %li \n", states_by_charge.size()   );
+        int ndm1 = 0;
         for(int charge = 0; charge < states_by_charge.size()-1; charge++) {
-            ndm1 += states_by_charge[charge+1].size() * states_by_charge[charge].size();
+            int nch0 = states_by_charge[charge  ].size();
+            int nch1 = states_by_charge[charge+1].size();
+            if(verbosity > 3) printf("PauliSolver::count_valid_transitions() charge %d nch0 %d nch1 %d nch1*nch0 %d ndm1 %d \n", charge, nch0, nch1, nch1*nch0, ndm1 );
+            ndm1 += nch1 * nch0;
         }
+        return ndm1;
     }
 
     // Get the site that changed in a transition between two states
@@ -521,6 +526,10 @@ public:
 
     /*
     // Python QmeQ version of generate_fct from qmeq/approach/base/pauli.py 
+    // self.paulifct = np.zeros((self.si.nleads, self.si.ndm1, 2), dtype=float)
+    //    -  self.si.nleads: Number of leads connected to the quantum dot system.
+    //    -  self.si.ndm1: Number of valid transitions between states differing by one electron (charge difference of 1).
+    //    -  2: Represents the forward and backward transition rates for each lead and transition.
     def generate_fct(self):            
         E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
         mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
@@ -541,10 +550,13 @@ public:
     */
 
     void generate_fct_compact() {
-        if(verbosity > 3) printf("PauliSolver::generate_fct_compact()\n");
+        //if(verbosity > 3) printf("PauliSolver::generate_fct_compact()\n");
         const int n = params.nstates;
-        count_valid_transitions();
+        ndm1 = count_valid_transitions(); 
+        if(verbosity > 3)printf("PauliSolver::generate_fct_compact() ndm1 = %d\n", ndm1);
         pauli_factors_compact = new double[params.nleads * ndm1 * 2]();   // Allocate compact array
+
+        int n2 = n * n;
         
         // Iterate through charge states
         for(int charge = 0; charge < states_by_charge.size()-1; charge++) {
@@ -556,8 +568,8 @@ public:
                     
                     for(int l = 0; l < params.nleads; l++) {
                         // Calculate coupling
-                        double tij = params.coupling[l * n * n + b * n + c];
-                        double tji = params.coupling[l * n * n + c * n + b];
+                        double tij = params.coupling[l * n2 + b*n + c];
+                        double tji = params.coupling[l * n2 + c*n + b];
                         double coupling_val = tij * tji;
                         
                         // Calculate Fermi factor
@@ -565,8 +577,13 @@ public:
                         double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
                         
                         // Store in compact format
-                        pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 0] = coupling_val *        fermi  * 2 * PI;
-                        pauli_factors_compact[l * ndm1 * 2 + cb * 2 + 1] = coupling_val * (1.0 - fermi) * 2 * PI;
+                        int idx = l * ndm1 * 2 + cb * 2;
+                        pauli_factors_compact[idx + 0] = coupling_val *        fermi  * 2 * PI;
+                        pauli_factors_compact[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI;
+                        if(verbosity > 3){
+                        // print(f"ApproachPauli.generate_fct() l: {l} i: {c} j: {b} cb: {cb} E_diff: {Ecb:.6f} coupling: {xcb:.6f} fermi: {rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
+                            printf("ApproachPauli.generate_fct() l: %d i: %d j: %d cb: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f, %.6f ]\n", l, c, b, cb, energy_diff, coupling_val, fermi, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);
+                        }
                     }
                 }
             }
@@ -847,15 +864,17 @@ public:
     void generate_kern() {
         if(verbosity > 0) printf("\nPauliSolver::generate_kern() Building kernel matrix...\n");
         const int n = params.nstates;
-        generate_fct();
+        //generate_fct();
+        init_states_by_charge();
         generate_fct_compact();
 
         if(verbosity > 0) {
             printf("PauliSolver::generate_kern().1 after generate_fct()\n");
-            printf("pauli_factors:\n");
-            print_matrix(pauli_factors, n, n, "%16.8f");
-            printf("pauli_factors_compact:\n");
-            print_matrix(pauli_factors_compact, n, 2, "%16.8f");
+            //printf("pauli_factors:\n");
+            //print_matrix(pauli_factors, n, n, "%16.8f");
+            printf("pauli_factors_compact[nlead%i,ndm1=%i,%i]:\n", params.nleads, ndm1, 2);
+            printf("pauli_factors_compact[lead=0]:\n");  print_matrix(pauli_factors_compact       , ndm1, 2, "%16.8f");
+            printf("pauli_factors_compact[lead=1]:\n");  print_matrix(pauli_factors_compact+ndm1*2, ndm1, 2, "%16.8f");
         }
 
         exit(0);
