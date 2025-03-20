@@ -104,3 +104,28 @@ Energies of 8 = 2^3 many-body states are calculated properly. Now we need to inv
     1. Group states by charge
     2. Sort within charge groups by energy
     3. Maintain original QmeQ ordering for matrix compatibility
+
+
+
+# What is the problem now ?
+
+OK, I think this problem is somehow related to what I already obsreved before when I was comparing the energies. To match the energies (which are now matching) it was necessary to introduce this state ordering
+state_order = [0, 4, 2, 6, 1, 5, 3, 7]
+which is basically doing two operation:
+1) assuming the states are ordered by charge like this
+q=0: [0:'000'],  q=1: [1:'001', 2:'010', 3:'100'],  q=2: [4:'011', 5:'101', 6:'110'], q=3: [7:'111']
+shorthand [0 | 1, 2, 3 | 4, 5, 6 | 7]
+2) when I considered the bit-reversal I get this [0 | 3, 2, 1 | 6, 5, 4 | 7]
+3) But in in ouput from QmeQ this ordering where 3 and 4 is swaped for some resason
+Final charge grouping:
+Charge 0: states [0] (binary: ['000'])
+Charge 1: states [1, 2, 4] (binary: ['001', '010', '100'])
+Charge 2: states [3, 5, 6] (binary: ['011', '101', '110'])
+Charge 3: states [7] (binary: ['111'])
+... not sure why there is this swap in QmeQ
+4) so finally I set state ordering to  state_order = [0 | 4, 2, 6 |  1, 5, 3 | 7]
+I load it into params.state_order in @pauli_solver.hpp
+this makes the energies consistent. But I think it is used only for SolverParams::calculate_state_energies() and it is not used any more for eval_lead_coupling generate_fct (?)
+Please check that
+
+then propose how to repait it

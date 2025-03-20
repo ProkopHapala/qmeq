@@ -168,7 +168,8 @@ def run_cpp_solver(TLeads):
         print("\nTLeads:");         print(TLeads_)
 
         #state_order = [0, 1, 2, 4, 3, 5, 6, 7]
-        state_order = [0, 4, 2, 6, 1, 5, 3, 7]
+        #state_order = [0, 4, 2, 6, 1, 5, 3, 7]
+        state_order = [0, 4, 2, 1, 6, 5, 3, 7]
         state_order = np.array(state_order, dtype=np.int32)
 
         solver               = pauli.create_pauli_solver_new( NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, state_order, verbosity)
@@ -325,4 +326,4 @@ if __name__ == "__main__":
     
     qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
     cpp_res  = run_cpp_solver(TLeads)
-    #compare_results(qmeq_res, cpp_res)
+    compare_results(qmeq_res, cpp_res)

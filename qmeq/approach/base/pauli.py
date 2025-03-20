@@ -73,6 +73,7 @@ class ApproachPauli(Approach):
 
         itype = self.funcp.itype
         paulifct = self.paulifct
+        print("ApproachPauli.generate_fct(): paulifct.shape = ", paulifct.shape)
         for charge in range(ncharge-1):
             ccharge = charge+1
             bcharge = charge
@@ -87,7 +88,7 @@ class ApproachPauli(Approach):
                     if self.verbosity > 3:
                         #if( (l==1) and (c==3) and (b==1) ):
                         #    print(f"DEBUG: generate_fct() l: {l} i: {c} j: {b} E_diff: {Ecb:.6f} coupling: {xcb:.6f} Tba[l,b,c]: {Tba[l,b,c]} Tba[l,c,b]: {Tba[l,c,b]}  fermi: {rez[0]/(2*np.pi):.6f} factors:[ {paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f} ]")
-                        print(f"DEBUG: generate_fct() l:{l} i:{c} j:{b} E_diff:{Ecb:.6f} coupling:{xcb:.6f} fermi:{rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
+                        print(f"ApproachPauli.generate_fct() l: {l} i: {c} j: {b} cb: {cb} E_diff: {Ecb:.6f} coupling: {xcb:.6f} fermi: {rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
 
         #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
 
@@ -113,8 +114,8 @@ class ApproachPauli(Approach):
         self.generate_fct()
         #if self.verbosity > 3:print("DEBUG: ApproachPauli.generate_kern() after generate_fct() kh.kern:\n", kh.kern)
         #exit(0)
-
         if self.verbosity > 3:  
+            #print("ApproachPauli.generate_kern().1 after generate_fct() kh.kern:\n", kh.kern)
             print("DEBUG QmeQ generate_kern() paulifct  : \n", self.paulifct )
             print("DEBUG QmeQ generate_kern() lenlst    : ", self.si.lenlst )
             print("DEBUG QmeQ generate_kern() dictdm    : ", self.si.dictdm )
@@ -122,23 +123,25 @@ class ApproachPauli(Approach):
             print("DEBUG QmeQ generate_kern() shiftlst1 : ", self.si.shiftlst1)
             print("DEBUG QmeQ generate_kern() mapdm0    : ", self.si.mapdm0 )
 
+            raise ValueError("DEBUG TERMINATION")
+
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:
                 if not kh.is_unique(b, b, bcharge):
                     continue
                 self.generate_coupling_terms(b, b, bcharge)
         #debug_print("DEBUG: ApproachPauli.generate_kern() kh.kern:\n", kh.kern)
+
         if self.verbosity > 0:  
-            print("DEBUG QmeQ generate_kern() kh.kern:\n", kh.kern)
-            
-            # Print with higher precision for comparison with C++
-            print("DEBUG QmeQ original kernel with high precision:")
+            print("ApproachPauli.generate_kern().2 after generate_coupling_terms() kh.kern:\n", kh.kern)
             np.set_printoptions(precision=15)
             print(kh.kern)
             np.set_printoptions(precision=5)  # Reset to default
+        print("===== ApproachPauli.generate_kern() DONE ====="  )
+        raise ValueError("DEBUG TERMINATION")
 
     def generate_coupling_terms(self, b, bp, bcharge):
-        print(f"DEBUG: ApproachPauli.generate_coupling_terms() b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}", self.verbosity)
+        print(f"ApproachPauli.generate_coupling_terms() b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}", self.verbosity)
         """Generate coupling terms for the Pauli master equation."""
         verb = 3
         #if self.verbosity > 3:  print(f"\nDEBUG: generate_coupling_terms() state b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}")
@@ -159,11 +162,11 @@ class ApproachPauli(Approach):
         bb = si.get_ind_dm0(b, b, bcharge)
         
         # Handle transitions from lower charge states
-        if self.verbosity > verb:  print(f"generate_coupling_terms() Q-1 states: ", statesdm[acharge] )
+        if self.verbosity > verb:  print(f"ApproachPauli.generate_coupling_terms() Q-1 states: ", statesdm[acharge] )
         for a in statesdm[acharge]:   # Loop over states with charge acharge = bcharge-1
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
-            if self.verbosity > verb:  print(f"DEBUG: Lower: state:{b} other:{a} aa:{aa} ba:{ba}")
+            if self.verbosity > verb:  print(f"LOWER: state:{b} other:{a} aa:{aa} ba:{ba}")
             fctm, fctp = 0, 0
             for l in range(nleads):
                 #if self.verbosity > 3:  print(f"DEBUG:   lead:{l} idx:{l},{ba}")
@@ -171,14 +174,14 @@ class ApproachPauli(Approach):
                 fctp += paulifct[l, ba, 0]  # Electron entering
             #verb_print("LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, aa)
-            if self.verbosity > verb:   print(f"DEBUG: generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
+            if self.verbosity > verb:   print(f"ApproachPauli.generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
         
         # Handle transitions to higher charge states
-        if self.verbosity > verb:  print(f"generate_coupling_terms() Q+1 states", statesdm[ccharge] )
+        if self.verbosity > verb:  print(f"ApproachPauli.generate_coupling_terms() Q+1 states", statesdm[ccharge] )
         for c in statesdm[ccharge]: # Loop over states with charge ccharge = bcharge+1
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
-            if self.verbosity > verb: print(f"DEBUG: Higher: state:{b} other:{c} cc:{cc} cb:{cb}")
+            if self.verbosity > verb: print(f"HIGHER: state:{b} other:{c} cc:{cc} cb:{cb}")
             fctm, fctp = 0, 0
             for l in range(nleads):
                 #if self.verbosity > 3: print(f"DEBUG:   lead:{l} idx:{l},{cb}")
@@ -186,7 +189,7 @@ class ApproachPauli(Approach):
                 fctp += paulifct[l, cb, 1]  # Electron leaving
             #verb_print("HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
-            if self.verbosity > verb: print(f"DEBUG: generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
+            if self.verbosity > verb: print(f"ApproachPauli.generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
 
         #if self.verbosity > 3: print(f"DEBUG: generate_coupling_terms() in {__file__}, kh.kern:\n", kh.kern)
 

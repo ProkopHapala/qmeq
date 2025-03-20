@@ -259,7 +259,7 @@ def construct_Tba(leads, tleads, Tba_=None):
 */
 
     void eval_lead_coupling(int lead, const double* TLead) {
-        if(_verbosity > 3) printf("DEBUG: SolverParams::eval_lead_coupling() Lead %i \n", lead);
+        if(_verbosity > 3) printf("SolverParams::eval_lead_coupling() Lead %i \n", lead);
         double* coupling_ = coupling + lead * nstates * nstates;
         for(int j1 = 0; j1 < nstates; j1++) {
             int state = j1;
@@ -284,13 +284,13 @@ def construct_Tba(leads, tleads, Tba_=None):
                     int ind = state | (1 << site);
                     coupling_[ind * nstates + j1] += dTba;
                     if(_verbosity > 3) { 
-                        printf("DEBUG: add_e lead %i states %3i -> %3i  |  site %3i ind %3i dTba %g tamp %g fsign %i\n", lead, j1, j2, site, ind, dTba, tamp, fsign ); 
+                        printf("add_e lead %i states %3i -> %3i  |  site %3i ind %3i dTba %g tamp %g fsign %i\n",  lead, j1, j2, site, ind, dTba, tamp, fsign ); 
                     }
                 } else {  // Remove electron
                     int ind = state & ~(1 << site);
                     coupling_[ind * nstates + j1] += dTba;
                     if(_verbosity > 3) { 
-                        printf("DEBUG: sub_e lead %i states %3i -> %3i  |  site %3i ind %3i dTba %g tamp %g fsign %i\n",  lead, j1, j2, site, ind, dTba, tamp, fsign ); 
+                        printf("sub_e lead %i states %3i -> %3i  |  site %3i ind %3i dTba %g tamp %g fsign %i\n",  lead, j1, j2, site, ind, dTba, tamp, fsign ); 
                     }
                 }
             }
@@ -303,23 +303,18 @@ def construct_Tba(leads, tleads, Tba_=None):
         for(int lead = 0; lead < nleads; lead++) {
             eval_lead_coupling(lead, TLeads + lead * nSingle);
         }
-        if(_verbosity > 3) print_tunneling_amplitudes();
-        exit(0);
+        //if(_verbosity > 3) print_tunneling_amplitudes();
+        //exit(0);
         //exit(0);
     }
 
-    void print_tunneling_amplitudes( int l ) {
-        printf("SolverParams::print_tunneling_amplitudes() Lead %i :\n", l);
-        for(int i = 0; i < nstates; i++) {
-            printf("[");
-            for(int j = 0; j < nstates; j++) {
-                printf("%10.8f ", coupling[l * nstates * nstates + i * nstates + j]);
-            }
-            printf("]\n  ");
+    void print_tunneling_amplitudes() {  
+        int nstates2 = nstates * nstates;
+        for(int l = 0; l < nleads; l++) {  
+            //print_tunneling_amplitudes(l); 
+            print_matrix(coupling + l * nstates2, nstates, nstates, "%10.8f  " );
         }
-        printf("]\n");
     }
-    void print_tunneling_amplitudes() {  for(int l = 0; l < nleads; l++) {  print_tunneling_amplitudes(l); }}
 
     void print_state_energies() {
         printf("SolverParams::print_state_energies(): ");
@@ -336,6 +331,9 @@ def construct_Tba(leads, tleads, Tba_=None):
 
 };
 
+// ==================================================
+//                PauliSolver
+// ==================================================
 
 class PauliSolver {
 public:
@@ -392,6 +390,7 @@ public:
 
 
     void init_map_dm0() {
+        if(verbosity > 3) printf("PauliSolver::init_map_dm0()\n");
         mapdm0.resize(shiftlst0.back(), -1);
         int counter = 0;
         int nq = states_by_charge.size();
@@ -429,6 +428,7 @@ public:
 
     // Initialize these in init_states_by_charge()
     void init_indexing_maps() {
+        if(verbosity > 3) printf("PauliSolver::init_indexing_maps()\n");
         const int n = params.nstates;
         lenlst.resize(states_by_charge.size());
         dictdm.resize(n);
@@ -462,10 +462,10 @@ public:
     }
 
     void init_state_ordering() {
+        if(verbosity > 3) printf("PauliSolver::init_state_ordering()\n");
         const int n = params.nstates;
         state_order.resize(n);
         state_order_inv.resize(n);
-        
         int idx = 0;
         for(int charge = 0; charge < states_by_charge.size(); charge++) {
             for(int state : states_by_charge[charge]) {
@@ -474,10 +474,8 @@ public:
                 idx++;
             }
         }
-
         // HACK - We change 3 and 4 ( for some reason  in QmeQ they are swapped)
         //swap( state_order[3], state_order[4] );
-
         idx=0;
         for(int i: state_order) {
             state_order_inv[i] = idx;
@@ -485,13 +483,13 @@ public:
         }
         
         if(verbosity > 3) {
-            printf("State ordering map: original -> ordered\n");
+            printf("PauliSolver::init_state_ordering() original -> ordered\n");
             for(int i = 0; i < n; i++) {   printf("%d -> %d\n", i, state_order[i]);    }
         }
     }
 
     void init_states_by_charge() {
-        //printf("DEBUG: C++ PauliSolver::init_states_by_charge()\n");
+        if(verbosity > 3) printf("PauliSolver::init_states_by_charge()\n");
         const int n = params.nstates;
         int max_charge = 0;
         
@@ -516,12 +514,34 @@ public:
         init_indexing_maps();
 
         if(verbosity > 3) {
-            printf("\nDEBUG: init_states_by_charge() states_by_charge: \n");
+            printf("PauliSolver::init_states_by_charge() states_by_charge: \n");
             print_vector_of_vectors(states_by_charge);
         }
     }
 
+    /*
+    // Python QmeQ version of generate_fct from qmeq/approach/base/pauli.py 
+    def generate_fct(self):            
+        E, Tba, si = self.qd.Ea, self.leads.Tba, self.si
+        mulst, tlst, dlst = self.leads.mulst, self.leads.tlst, self.leads.dlst
+        ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm
+        itype = self.funcp.itype
+        paulifct = self.paulifct
+        for charge in range(ncharge-1):
+            ccharge = charge+1
+            bcharge = charge
+            for c, b in itertools.product(statesdm[ccharge], statesdm[bcharge]):
+                cb = si.get_ind_dm1(c, b, bcharge)
+                Ecb = E[c]-E[b]
+                for l in range(nleads):
+                    xcb = (Tba[l, b, c]*Tba[l, c, b]).real
+                    rez = func_pauli(Ecb, mulst[l], tlst[l], dlst[l, 0], dlst[l, 1], itype)
+                    paulifct[l, cb, 0] = xcb*rez[0]  # Forward
+                    paulifct[l, cb, 1] = xcb*rez[1]  # Backward
+    */
+
     void generate_fct_compact() {
+        if(verbosity > 3) printf("PauliSolver::generate_fct_compact()\n");
         const int n = params.nstates;
         count_valid_transitions();
         pauli_factors_compact = new double[params.nleads * ndm1 * 2]();   // Allocate compact array
@@ -556,7 +576,7 @@ public:
     // Generate Pauli factors for transitions between states
     void generate_fct() {
         if(verbosity > 3) {
-            printf("\nDEBUG: generate_fct() in %s\n", __FILE__);
+            printf("PauliSolver::generate_fct()\n");
             params.print_lead_params();
             params.print_state_energies();
             params.print_tunneling_amplitudes();
@@ -629,7 +649,7 @@ public:
         // Replicate Python logic for mapping state pairs to indices
         int index = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
         if (verbosity > 3) {
-            printf("DEBUG: get_ind_dm0(b=%d, bp=%d, charge=%d) = %d\n", b, bp, charge, index);
+            printf("PauliSolver::get_ind_dm0(b=%d, bp=%d, charge=%d) = %d\n", b, bp, charge, index);
         }
         return index;
     }
@@ -638,7 +658,7 @@ public:
         // Replicate Python logic for mapping transitions to indices
         int index = dictdm[c] * lenlst[bcharge] + dictdm[b] + shiftlst1[bcharge];
         if (verbosity > 3) {
-            printf("DEBUG: get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d\n", c, b, bcharge, index);
+            printf("PauliSolver::get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d\n", c, b, bcharge, index);
         }
         return index;
     }
@@ -667,8 +687,8 @@ public:
         const int bb = b;
 
         if(verbosity > 3) {
-            printf("\nDEBUG: ApproachPauli.generate_coupling_terms() b: %d Q: %d\n", b, Q);
-            printf("DEBUG: ApproachPauli.generate_coupling_terms() b: %d bp: %d  bcharge: %d statesdm: ", b, b, Q);
+            printf("\nPauliSolver::generate_coupling_terms() b: %d Q: %d\n", b, Q);
+            printf("PauliSolver::generate_coupling_terms() b: %d bp: %d  bcharge: %d statesdm: ", b, b, Q);
             printf("[");
             for(const auto& states : states_by_charge) {
                 printf("[");
@@ -679,7 +699,7 @@ public:
                 printf("], ");
             }
             printf("[]]\n");
-            printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q);
+            printf("======== C++ pauli_solver.hpp  generate_coupling_terms() b: %i Q: %i \n", b, Q);
         }
 
         int n2 = n * n;
@@ -707,7 +727,7 @@ public:
                         double energy_diff = params.energies[b] - params.energies[a];
                         double coupling_val = params.coupling[l * n2 + a * n + b] * params.coupling[l * n2 + b * n + a];
                         double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
-                        printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n",  l, b, a, energy_diff, coupling_val, fermi, factor_p, factor_m);
+                        printf("PauliSolver::generate_coupling_terms() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n",  l, b, a, energy_diff, coupling_val, fermi, factor_p, factor_m);
                     }
                 }
                 //int aa = a * n + a;
@@ -718,7 +738,7 @@ public:
         }        
         if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
             int Qhigher=Q+1;
-            if(verbosity > 3){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
+            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 
@@ -737,7 +757,7 @@ public:
                         double energy_diff = params.energies[c] - params.energies[b];
                         double coupling_val = params.coupling[l * n2 + b * n + c] * params.coupling[l * n2 + c * n + b];
                         double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
-                        printf("DEBUG: generate_fct() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
+                        printf("PauliSolver::generate_coupling_terms() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", 
                                l, c, b, energy_diff, coupling_val, fermi, factor_m, factor_p);
                     }
                 }
@@ -758,13 +778,13 @@ public:
         //const int bb = b * n + b;
         const int bb = b;
 
-        if(verbosity > 3){  printf("\nC++ pauli_solver.hpp ======== generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
+        if(verbosity > 3){  printf("PauliSolver::generate_coupling_terms_compact() b: %i Q: %i \n", b, Q );  }
 
         int n2 = n * n;
 
         if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
             int Qlower=Q-1;
-            if(verbosity > 3){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms_compact() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
             
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
@@ -788,7 +808,7 @@ public:
         }        
         if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
             int Qhigher=Q+1;
-            if(verbosity > 3){ printf("generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
+            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms_compact() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 
@@ -825,16 +845,28 @@ public:
     
     // Generate kernel matrix
     void generate_kern() {
-        if(verbosity > 0) printf("\nDEBUG: generate_kern() Building kernel matrix...\n");
+        if(verbosity > 0) printf("\nPauliSolver::generate_kern() Building kernel matrix...\n");
         const int n = params.nstates;
         generate_fct();
+        generate_fct_compact();
+
+        if(verbosity > 0) {
+            printf("PauliSolver::generate_kern().1 after generate_fct()\n");
+            printf("pauli_factors:\n");
+            print_matrix(pauli_factors, n, n, "%16.8f");
+            printf("pauli_factors_compact:\n");
+            print_matrix(pauli_factors_compact, n, 2, "%16.8f");
+        }
+
+        exit(0);
+
         std::fill(kernel, kernel + n * n, 0.0);
         for(int state = 0; state < n; state++) { 
             int b = state_order_inv[state];
             generate_coupling_terms(b); 
         }
         if(verbosity > 1) { 
-            printf("DEBUG generate_kern() kh.kern:\n");
+            printf("PauliSolver::generate_kern() kernel:\n");
             print_matrix(kernel, n, n);
         }
         //normalize_kernel();
@@ -851,7 +883,7 @@ public:
         
         // Print the original kernel matrix for debugging
         if(verbosity > 1) {
-            printf("DEBUG  solve_kern() original kernel:\n");
+            printf("PauliSolver::solve_kern() original kernel:\n");
             print_matrix(kernel, n, n, "%18.15f " );
         }
         
@@ -868,9 +900,9 @@ public:
         std::fill(rhs + 1, rhs + n, 0.0);
         
         if(verbosity > 1) {
-            printf("DEBUG  solve_kern() modified kernel with normalization row:\n");
+            printf("PauliSolver::solve_kern() modified kernel with normalization row:\n");
             print_matrix(kern_copy, n, n, "%18.15f " );
-            printf("DEBUG  solve_kern() rhs: ");
+            printf("PauliSolver::solve_kern() rhs: ");
             print_vector(rhs, n, "%18.15f " );
         }
         
@@ -878,7 +910,7 @@ public:
         linSolve_gauss(n, kern_copy, rhs, probabilities);
         
         if(verbosity > 1) {
-            printf("DEBUG  solve_kern() probabilities from Gaussian solver: ");
+            printf("PauliSolver::solve_kern() probabilities from Gaussian solver: ");
             print_vector(probabilities, n, "%18.15f " );
         }
         

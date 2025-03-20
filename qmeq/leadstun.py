@@ -63,7 +63,7 @@ def construct_Tba(leads, tleads, Tba_=None):
                     continue
                 dTba = fsign*tamp
                 Tba[lead, ind, j1] += dTba
-                verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i  |  ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
+                #verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i  |  ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
             else:
                 statep = list(state)
                 statep[j2] = 0
@@ -72,10 +72,9 @@ def construct_Tba(leads, tleads, Tba_=None):
                     continue
                 dTba = fsign*np.conj(tamp)
                 Tba[lead, ind, j1] += dTba
-                verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i   | ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
-            #verb_print_(2, "DEBUG:  lead %i states %3i -> %3i    ind %3i Tba %g tamp %g \n", j3, j1, j2,   ind, Tba[j3, ind, j1], tamp*fsign)
+                #verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i   | ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
     verb_print_(2, "DEBUG: construct_Tba() Tba:\n", Tba.real)
-    raise ValueError("DEBUG TERMINATION")
+    #raise ValueError("DEBUG TERMINATION")
     return Tba
 
 
