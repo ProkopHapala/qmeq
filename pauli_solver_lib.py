@@ -188,6 +188,12 @@ class PauliSolver:
         self.lib.get_coupling(solver, _np_as(coupling, c_double_p))
         return coupling
     
+    # void get_pauli_factors(void* solver_ptr, double* out_pauli_factors) {
+    def get_pauli_factors(self, solver, NLeads, NStates):
+        pauli_factors = np.zeros((NLeads, NStates, NStates))
+        self.lib.get_pauli_factors(solver, _np_as(pauli_factors, c_double_p))
+        return pauli_factors
+    
     def cleanup(self, solver):
         """Clean up C++ solver instance"""
         self.lib.delete_pauli_solver(solver)
