@@ -11,7 +11,7 @@ from ..wrappers.mytypes import complexnp
 from .kernel_handler import KernelHandler
 from .kernel_handler import KernelHandlerMatrixFree
 
-from ..config import debug_print, verb_print
+from ..config import debug_print, verb_print, verb_print_
 
 class Approach(object):
     """
@@ -139,7 +139,7 @@ class Approach(object):
         return self.si.ndm0r
 
     def prepare_kern(self):
-        print('prepare_kern()')
+        verb_print_(0,"Approach.prepare_kern()")
         if self.is_prepared and not self.si.states_changed:
             self.clean_arrays()
             return
@@ -196,7 +196,7 @@ class Approach(object):
             self.kernel_handler = KernelHandler(self.si)
 
     def prepare_solver(self):
-        debug_print("DEBUG: Approach.prepare_solver()")
+        verb_print_(0,"Approach.prepare_solver()")
         solmethod = self.funcp.solmethod
         # Determine the proper solution method
         if self.funcp.mfreeq:
@@ -247,13 +247,13 @@ class Approach(object):
             (Modifies) Kernel matrix for 1vN approach.
         """
 
-        print("Approach.generate_kern()")
+        verb_print_(0,"Approach.generate_kern()")
 
         E = self.qd.Ea
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
 
-        debug_print(f"DEBUG: Approach.generate_kern() ncharge: {ncharge}  statesdm: {statesdm}")
+        verb_print_(1,f"Approach.generate_kern() ncharge: {ncharge}  statesdm: {statesdm}")
 
         for bcharge in range(ncharge):
             for b, bp in itertools.combinations_with_replacement(statesdm[bcharge], 2):
@@ -262,7 +262,7 @@ class Approach(object):
                 kh.set_energy(E[b]-E[bp], b, bp, bcharge)
                 self.generate_coupling_terms(b, bp, bcharge)
 
-        debug_print("DEBUG: Approach.generate_kern() DONE: kh.kern:\n", kh.kern)
+        verb_print_(1,"Approach.generate_kern() DONE: kh.kern:\n", kh.kern)
 
     def generate_coupling_terms(self, b, bp, bcharge):
         #debug_print(f"DEBUG: Approach.generate_coupling_terms() b: {b}  bp: {bp}  bcharge: {bcharge}")
@@ -289,7 +289,7 @@ class Approach(object):
             after acting with Liouvillian, i.e., dphi0_dt=L(phi0p).
         """
 
-        debug_print("DEBUG: Approach.generate_vec()")
+        verb_print_(0,"Approach.generate_vec()")
         norm_row = self.funcp.norm_row
 
         kh = self.kernel_handler
@@ -312,7 +312,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        print( f"########### DEBUG: Approach.solve_kern()  ", self.funcp.solmethod )
+        verb_print_(0, f"Approach.solve_kern() solmethod: {self.funcp.solmethod}")
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -334,14 +334,13 @@ class Approach(object):
         #verb_print( "DEBUG: -- Approach.solve_kern() kern:\n", kern)
         #verb_print( "DEBUG: -- Approach.solve_kern() bvec:\n", bvec)
         if self.verbosity > 0:  
-            print("DEBUG QmeQ solve_kern() kern:\n", kern)
-            print("DEBUG QmeQ solve_kern() bvec:\n", bvec)
-            
+            print("Approach.solve_kern() kern:\n", kern)
+            print("Approach.solve_kern() bvec:\n", bvec)
             # Print with higher precision for comparison with C++
-            print("DEBUG QmeQ modified kernel with high precision:")
+            print("Approach.solve_kern() modified kernel with high precision:")
             np.set_printoptions(precision=15)
             print(kern)
-            print("DEBUG QmeQ RHS vector with high precision:")
+            print("Approach.solve_kern() RHS vector with high precision:")
             print(bvec)
             np.set_printoptions(precision=5)  # Reset to default
 
@@ -355,8 +354,8 @@ class Approach(object):
             self.phi0[:] = self.sol0[0]
             self.success = True
 
-            verb_print("DEBUG: -- Approach.solve_kern() sol0:\n", self.sol0)
-            verb_print("DEBUG: -- Approach.solve_kern() phi0:\n", self.phi0)
+            verb_print_(1, "Approach.solve_kern() sol0:\n", self.sol0)
+            verb_print_(1, "Approach.solve_kern() phi0:\n", self.phi0)
 
 
         except Exception as exept:
@@ -412,22 +411,22 @@ class Approach(object):
         currentq : bool
             Calculate the current.
         """
-        print("DEBUG: Approach.solve()")
-        print( " solve() type(self).__name__ ",  type(self).__name__)
+        verb_print_(0, "apr: Approach.solve()")
+        verb_print_(0, " solve() type(self).__name__ ",  type(self).__name__)
         #print(f" solve() self.__file__: {self.__file__}") 
 
         if qdq:
-            print("DEBUG: Approach.solve() qdq")
+            verb_print_(0, "Approach.solve() qdq")
             self.qd.diagonalise()
             if rotateq:
                 self.rotate()
         #
         if masterq:
-            print("DEBUG: Approach.solve() masterq")
+            verb_print_(0, "Approach.solve() masterq")
             self.prepare_kern()
-            print("DEBUG : Approach.solve() after prepare_kern()")
+            verb_print_(0, "Approach.solve() after prepare_kern()")
             self.generate_fct()
-            print("DEBUG : Approach.solve() after generate_fct()")    
+            verb_print_(0, "Approach.solve() after generate_fct()")    
 
             if not self.funcp.mfreeq:
                 self.generate_kern()

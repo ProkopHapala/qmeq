@@ -8,7 +8,7 @@ from ...wrappers.mytypes import doublenp
 from ...specfunc.specfunc import func_pauli
 from ..aprclass import Approach
 
-from ...config import debug_print, verb_print
+from ...config import debug_print, verb_print, verb_print_
 
 # ---------------------------------------------------------------------------------------------------
 # Pauli master equation
@@ -46,13 +46,11 @@ class ApproachPauli(Approach):
         """
         Make factors used for generating Pauli master equation kernel.
         """
-
         print("ApproachPauli.generate_fct(self):")
         #exit()
 
         if self.verbosity > 3:
-            print("\nDEBUG: ApproachPauli::generate_fct() in ", __file__)
-            print("\nDEBUG: QmeQ inputs:")
+            print("\nQmeQ ApproachPauli::generate_fct() in ", __file__, " verbosity = ", self.verbosity, " inputs: \n")
             print(f"State energies (E):", self.qd.Ea)
             #print(f"Tunneling amplitudes (Tba):", self.leads.Tba)
             print(f"Tunneling amplitudes (Tba) in pauli.py of QmeQ:\nLead 0:\n", (self.leads.Tba[0,:,:]).real, "\nLead 1:\n", (self.leads.Tba[1,:,:]).real) 
@@ -62,8 +60,6 @@ class ApproachPauli(Approach):
             print(f"Band parameters (dlst):", self.leads.dlst)
             print(f"Number of charge states:", self.si.ncharge)
             print(f"States by charge (statesdm):", self.si.statesdm)
-
-            print("\nDEBUG: ApproachPauli::generate_fct() in ", __file__)
         
         #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
             
@@ -73,7 +69,7 @@ class ApproachPauli(Approach):
 
         itype = self.funcp.itype
         paulifct = self.paulifct
-        print("ApproachPauli.generate_fct(): paulifct.shape = ", paulifct.shape)
+        #verb_print_(3,"ApproachPauli.generate_fct(): paulifct.shape = ", paulifct.shape)
         for charge in range(ncharge-1):
             ccharge = charge+1
             bcharge = charge
@@ -85,10 +81,7 @@ class ApproachPauli(Approach):
                     rez = func_pauli(Ecb, mulst[l], tlst[l], dlst[l, 0], dlst[l, 1], itype)
                     paulifct[l, cb, 0] = xcb*rez[0]  # Forward
                     paulifct[l, cb, 1] = xcb*rez[1]  # Backward
-                    if self.verbosity > 3:
-                        #if( (l==1) and (c==3) and (b==1) ):
-                        #    print(f"DEBUG: generate_fct() l: {l} i: {c} j: {b} E_diff: {Ecb:.6f} coupling: {xcb:.6f} Tba[l,b,c]: {Tba[l,b,c]} Tba[l,c,b]: {Tba[l,c,b]}  fermi: {rez[0]/(2*np.pi):.6f} factors:[ {paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f} ]")
-                        print(f"ApproachPauli.generate_fct() l: {l} i: {c} j: {b} cb: {cb} E_diff: {Ecb:.6f} coupling: {xcb:.6f} fermi: {rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
+                    #verb_print_(3,f"ApproachPauli.generate_fct() l: {l} i: {c} j: {b} cb: {cb} E_diff: {Ecb:.6f} coupling: {xcb:.6f} fermi: {rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
 
         #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
 
@@ -103,26 +96,25 @@ class ApproachPauli(Approach):
         """
         print("ApproachPauli.generate_kern()")
         if self.verbosity > 3:
-            print("\nDEBUG: generate_kern() Building kernel matrix...")
+            print("ApproachPauli.generate_kern() Building kernel matrix...")
             
-        debug_print("DEBUG: ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(self.si.ncharge, self.si.statesdm))
+        verb_print_(0,"ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(self.si.ncharge, self.si.statesdm))
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
 
-        if self.verbosity > 3:debug_print("DEBUG: ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(ncharge, statesdm))
+        verb_print_(0,"ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(ncharge, statesdm))
 
         self.generate_fct()
         #if self.verbosity > 3:print("DEBUG: ApproachPauli.generate_kern() after generate_fct() kh.kern:\n", kh.kern)
         #exit(0)
         if self.verbosity > 3:  
             #print("ApproachPauli.generate_kern().1 after generate_fct() kh.kern:\n", kh.kern)
-            print("DEBUG QmeQ generate_kern() paulifct  : \n", self.paulifct )
-            print("DEBUG QmeQ generate_kern() lenlst    : ", self.si.lenlst )
-            print("DEBUG QmeQ generate_kern() dictdm    : ", self.si.dictdm )
-            print("DEBUG QmeQ generate_kern() shiftlst0 : ", self.si.shiftlst0)
-            print("DEBUG QmeQ generate_kern() shiftlst1 : ", self.si.shiftlst1)
-            print("DEBUG QmeQ generate_kern() mapdm0    : ", self.si.mapdm0 )
-
+            print("ApproachPauli.generate_kern()paulifct  : \n", self.paulifct )
+            print("lenlst    : ", self.si.lenlst )
+            print("dictdm    : ", self.si.dictdm )
+            print("shiftlst0 : ", self.si.shiftlst0)
+            print("shiftlst1 : ", self.si.shiftlst1)
+            print("mapdm0    : ", self.si.mapdm0 )
             raise ValueError("DEBUG TERMINATION")
 
         for bcharge in range(ncharge):

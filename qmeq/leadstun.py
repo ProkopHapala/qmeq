@@ -42,7 +42,7 @@ def construct_Tba(leads, tleads, Tba_=None):
         Tba = np.zeros((si.nleads, si.nmany, si.nmany), dtype=mtype)
     else:
         Tba = Tba_
-    verb_print_(2, "DEBUG: construct_Tba() tleads:\n", tleads )
+    verb_print_(1, "leadstun.py: construct_Tba() tleads:\n", tleads )
 
     # Iterate over many-body states
     for j1 in range(si.nmany):
@@ -73,7 +73,7 @@ def construct_Tba(leads, tleads, Tba_=None):
                 dTba = fsign*np.conj(tamp)
                 Tba[lead, ind, j1] += dTba
                 #verb_print_(2+blead, "DEBUG: add_e lead %i states %3i -> %3i   | ind %3i dTba %g tamp %g fsign %g" %(lead, j1, j2,   ind, dTba, tamp, fsign) )
-    verb_print_(2, "DEBUG: construct_Tba() Tba:\n", Tba.real)
+    verb_print_(1, "leadstun.py: construct_Tba() Tba:\n", Tba.real)
     #raise ValueError("DEBUG TERMINATION")
     return Tba
 
