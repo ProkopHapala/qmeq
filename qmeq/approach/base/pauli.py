@@ -115,7 +115,7 @@ class ApproachPauli(Approach):
             print("shiftlst0 : ", self.si.shiftlst0)
             print("shiftlst1 : ", self.si.shiftlst1)
             print("mapdm0    : ", self.si.mapdm0 )
-            raise ValueError("DEBUG TERMINATION")
+            #raise ValueError("DEBUG TERMINATION")
 
         for bcharge in range(ncharge):
             for b in statesdm[bcharge]:
@@ -158,13 +158,13 @@ class ApproachPauli(Approach):
         for a in statesdm[acharge]:   # Loop over states with charge acharge = bcharge-1
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
-            if self.verbosity > verb:  print(f"LOWER: state:{b} other:{a} aa:{aa} ba:{ba}")
+            #if self.verbosity > verb:  print(f"LOWER: state:{b} other:{a} aa:{aa} ba:{ba}")
             fctm, fctp = 0, 0
             for l in range(nleads):
                 #if self.verbosity > 3:  print(f"DEBUG:   lead:{l} idx:{l},{ba}")
                 fctm -= paulifct[l, ba, 1]  # Electron leaving
                 fctp += paulifct[l, ba, 0]  # Electron entering
-            #verb_print("LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
+            verb_print_(3,"set_matrix_element_pauli() LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, aa)
             if self.verbosity > verb:   print(f"ApproachPauli.generate_coupling_terms() state:{b} other:{a} rate:{fctp:.6f}")
         
@@ -173,13 +173,13 @@ class ApproachPauli(Approach):
         for c in statesdm[ccharge]: # Loop over states with charge ccharge = bcharge+1
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
-            if self.verbosity > verb: print(f"HIGHER: state:{b} other:{c} cc:{cc} cb:{cb}")
+            #if self.verbosity > verb: print(f"HIGHER: state:{b} other:{c} cc:{cc} cb:{cb}")
             fctm, fctp = 0, 0
             for l in range(nleads):
                 #if self.verbosity > 3: print(f"DEBUG:   lead:{l} idx:{l},{cb}")
                 fctm -= paulifct[l, cb, 0]  # Electron entering
                 fctp += paulifct[l, cb, 1]  # Electron leaving
-            #verb_print("HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
+            verb_print_(3,"set_matrix_element_pauli() HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
             if self.verbosity > verb: print(f"ApproachPauli.generate_coupling_terms() state:{b} other:{c} rate:{fctp:.6f}")
 
