@@ -160,6 +160,7 @@ struct SolverParams {
     LeadParams* leads=0; // Lead parameters [nleads]
     double* coupling=0;  // Coupling matrix elements [nleads * nstates * nstates]
     int* state_order=0;  // State order [nstates]
+    int* state_order2=0; // State order [nstates]
     
     // Constructor
     SolverParams() : nSingle(0), nstates(0), nleads(0) {}
@@ -352,6 +353,7 @@ public:
     std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
     std::vector<int> state_order;      // Maps original index -> ordered index
     std::vector<int> state_order_inv;  // Maps ordered index -> original index
+    std::vector<int> state_order2;     // Maps original index -> ordered index
 
     // from indexing.py of QmeQ
     std::vector<int> lenlst;     // Number of states in each charge sector
@@ -841,6 +843,8 @@ public:
     }
 
     void generate_coupling_terms_compact(int b) {
+
+
         const int n = params.nstates;
         const int Q = count_electrons(b);
         const int max_charge = states_by_charge.size() - 1;
@@ -868,7 +872,8 @@ public:
             printf("]\n");
         }
 
-        int bb = b; // Original
+        //int bb = b; // Original
+        int bb = state_order2[b];
         //int bb = get_ind_dm0(b, b, Q);  // Transform to density matrix index, matching Python approach
 
         if(verbosity > 3){  printf("PauliSolver::generate_coupling_terms_compact() b: %i Q: %i \n", b, Q );  }
@@ -882,7 +887,8 @@ public:
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
 
-                int aa = a; // Original
+                //int aa = a; // Original
+                int aa = state_order2[a];
                 //int aa = get_ind_dm0(a, a, Qlower);
                 int ba = get_ind_dm1(b, a, Qlower);
                 
@@ -901,7 +907,6 @@ public:
                     fctm -= pauli_factors_compact[idx + 1];
                     fctp += pauli_factors_compact[idx + 0];
                 }
-                //int aa = a * n + a;
                 
                 if(verbosity > 3){ printf("set_matrix_element_pauli() LOWER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, a, fctm, fctp, bb, aa); }
                 set_matrix_element_pauli(fctm, fctp, bb, aa );
@@ -913,7 +918,8 @@ public:
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 
-                int cc = c; // Original
+                //int cc = c; // Original
+                int cc = state_order2[c];
                 //int cc = get_ind_dm0(c, c, Qhigher );
                 int cb = get_ind_dm1(c, b, Q       );
                 
@@ -958,6 +964,7 @@ public:
         if(verbosity > 0) printf("\nPauliSolver::generate_kern() Building kernel matrix...\n");
         // -- set kernel to zero using memset
         memset(kernel, 0, sizeof(double) * params.nstates * params.nstates);
+        state_order2 = {0,1,2,4,3,5,6,7};
         
 
         if(verbosity > 3) {
