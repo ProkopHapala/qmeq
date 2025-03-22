@@ -126,6 +126,31 @@ Charge 3: states [7] (binary: ['111'])
 4) so finally I set state ordering to  state_order = [0 | 4, 2, 6 |  1, 5, 3 | 7]
 I load it into params.state_order in @pauli_solver.hpp
 this makes the energies consistent. But I think it is used only for SolverParams::calculate_state_energies() and it is not used any more for eval_lead_coupling generate_fct (?)
-Please check that
+Please check that then propose how to repait it
 
-then propose how to repait it
+# Understanding Density Matrix Indices vs. State Indices
+
+## Key Differences Between ndm1 and nstates
+
+1. **nstates (= 8)**: Number of many-body states (2^3 in our case)
+   - This is the dimension of the kernel matrix (8×8)
+   - These are the actual quantum states of the system
+
+2. **ndm1 (= 15)**: Number of valid transitions between states with charge differing by 1
+   - Calculated in `count_valid_transitions()`
+   - Represents transitions between states in adjacent charge sectors
+   - Formula: Sum of products of number of states in adjacent charge sectors
+   - For our example: (1×3) + (3×3) + (3×1) = 3 + 9 + 3 = 15
+
+3. **Density Matrix Indexing**:
+   - The `get_ind_dm0` and `get_ind_dm1` functions map state pairs to density matrix indices
+   - These indices can exceed nstates (up to 19 in our case)
+   - They don't directly correspond to kernel matrix indices
+   - Python handles this mapping properly
+   - C++ was trying to use these indices directly in the kernel matrix, causing out-of-bounds errors
+
+4. **Solution**:
+   - We added bounds checking in `set_matrix_element_pauli` to gracefully handle density matrix indices
+   - This allows the algorithm to proceed without crashes
+   - However, a proper solution would implement the correct mapping between density matrix indices and kernel matrix indices
+

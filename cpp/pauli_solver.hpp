@@ -419,7 +419,7 @@ public:
     //inline int get_ind_dm0_0( int i, int iq ){ return dictdm[i] + shiftlst0[iq]; }
     inline int get_ind_dm0(int b, int bp, int charge) {
         // Mirror Python's get_ind_dm0 from indexing.py
-        int ib = dictdm[b];
+        int ib  = dictdm[b];
         int ibp = dictdm[bp];
         int result = ibp + ib * lenlst[charge] + shiftlst0[charge];
         if(verbosity > 3) {
@@ -868,7 +868,8 @@ public:
             printf("]\n");
         }
 
-        int bb = get_ind_dm0(b, b, Q);  // Transform to density matrix index, matching Python approach
+        int bb = b; // Original
+        //int bb = get_ind_dm0(b, b, Q);  // Transform to density matrix index, matching Python approach
 
         if(verbosity > 3){  printf("PauliSolver::generate_coupling_terms_compact() b: %i Q: %i \n", b, Q );  }
 
@@ -881,8 +882,8 @@ public:
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
 
-                //int aa = a; // Original
-                int aa = get_ind_dm0(a, a, Qlower);
+                int aa = a; // Original
+                //int aa = get_ind_dm0(a, a, Qlower);
                 int ba = get_ind_dm1(b, a, Qlower);
                 
                 if(verbosity > 3) {
@@ -912,8 +913,8 @@ public:
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 
-                //int cc = c;
-                int cc = get_ind_dm0(c, c, Qhigher );
+                int cc = c; // Original
+                //int cc = get_ind_dm0(c, c, Qhigher );
                 int cb = get_ind_dm1(c, b, Q       );
                 
                 if(verbosity > 3) {
@@ -955,6 +956,9 @@ public:
     // Generate kernel matrix
     void generate_kern() {
         if(verbosity > 0) printf("\nPauliSolver::generate_kern() Building kernel matrix...\n");
+        // -- set kernel to zero using memset
+        memset(kernel, 0, sizeof(double) * params.nstates * params.nstates);
+        
 
         if(verbosity > 3) {
             printf("PauliSolver::generate_fct()\n");
@@ -990,7 +994,7 @@ public:
         }
         if(verbosity > 1) { 
             printf("\nPauliSolver::generate_kern() final kernel:\n");
-            print_matrix(kernel, n, n);
+            print_matrix(kernel, n, n, "%16.8f");
             printf("===== PauliSolver::generate_kern() DONE \n");
         }
 
