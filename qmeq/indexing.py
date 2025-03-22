@@ -744,8 +744,8 @@ class StateIndexingPauli(StateIndexing):
         statesdm: list
             List containing indices of many-body state under consideration.
         """
-        verb_print("DEBUG: StateIndexingPauli.set_statesdm()")
-        debug_print(f"DEBUG: StateIndexingPauli.set_statesdm() statesdm: {statesdm}")
+        verb_print("StateIndexingPauli.set_statesdm()")
+        debug_print(f"StateIndexingPauli.set_statesdm() statesdm: {statesdm}")
         self.statesdm = statesdm
         self.statesdm.append([])
         self.npauli_ = 0
@@ -759,8 +759,7 @@ class StateIndexingPauli(StateIndexing):
         """
         Makes dictdm, shiftlst0 for Pauli master equation indexing.
         """
-        verb_print("DEBUG: StateIndexingPauli.set_dictdm()")
-        debug_print("DEBUG: StateIndexingPauli.set_dictdm()")
+        verb_print_(3,"StateIndexingPauli.set_dictdm()")
         for j1 in range(self.ncharge):
             self.shiftlst0[j1+1] = self.shiftlst0[j1] + len(self.statesdm[j1])
             counter = 0
@@ -796,10 +795,10 @@ class StateIndexingPauli(StateIndexing):
                         for sz in range(b_sz+2, b_ssq+1, 2):
                             b1 = self.qn_ind[(b_ch,  sz, b_ssq,  b_alpha)]
                             add_elem(counter, b1, b1, charge, dictq=False)
-                        print(  "set_mapdm-ssq ", b, charge, charge, add_elem(counter, b, b, charge) )
+                        verb_print_(3, "StateIndexingPauli.set_mapdm-ssq ", b, charge, charge, add_elem(counter, b, b, charge) )
                         counter = counter+1
                 else:
-                    print(  "set_mapdm-non-ssq ", b, charge, charge, add_elem(counter, b, b, charge) )
+                    verb_print_(3, "StateIndexingPauli.set_mapdm-non-ssq ", b, charge, charge, add_elem(counter, b, b, charge) )
                     counter = add_elem(counter, b, b, charge)
         self.npauli = counter
         exit(0)
@@ -823,7 +822,7 @@ class StateIndexingPauli(StateIndexing):
         int
             Index of the zeroth order density matrix element.
         """
-        debug_print(f"DEBUG: StateIndexingPauli.get_ind_dm0() b: {b}  bp: {bp}  charge: {charge}")
+        verb_print_(3, f"DEBUG: StateIndexingPauli.get_ind_dm0() b: {b}  bp: {bp}  charge: {charge}")
         if maptype == 0:
             return self.dictdm[b] + self.shiftlst0[charge]
         elif maptype == 1:

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <string>
 #include <algorithm>
 #include <cstring>
+#include <numeric>  // Required for std::accumulate
 #include <cmath>
 #include "gauss_solver.hpp"
 //#include "iterative_solver.hpp"
@@ -344,6 +346,7 @@ public:
     double* probabilities; // State probabilities [nstates]
     double* pauli_factors; // Pauli factors for transitions [nleads * nstates * nstates * 2]
     double* pauli_factors_compact;  // [nleads][ndm1][2]
+    int n_pauli_factors_compact;    // Number of Pauli factors in compact array
     int ndm1;                       // Number of valid transitions (states differing by 1 charge)
     int verbosity;        // Verbosity level for debugging
     std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
@@ -404,8 +407,39 @@ public:
         return 1.0/(1.0 + exp((energy_diff - mu)/temp));
     }
 
+    // int get_ind_dm0(int b, int bp, int charge) {
+    //     // Replicate Python logic for mapping state pairs to indices
+    //     int index = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
+    //     if (verbosity > 3) {
+    //         printf("PauliSolver::get_ind_dm0(b=%d, bp=%d, charge=%d) = %d\n", b, bp, charge, index);
+    //     }
+    //     return index;
+    // }
+
     //inline int get_ind_dm0_0( int i, int iq ){ return dictdm[i] + shiftlst0[iq]; }
-    inline int get_ind_dm0_0( int i, int j, int iq ){ return lenlst[iq]*dictdm[i] + dictdm[j]  + shiftlst0[iq]; }
+    inline int get_ind_dm0(int b, int bp, int charge) {
+        // Mirror Python's get_ind_dm0 from indexing.py
+        int ib = dictdm[b];
+        int ibp = dictdm[bp];
+        int result = ibp + ib * lenlst[charge] + shiftlst0[charge];
+        if(verbosity > 3) {
+            printf("DEBUG-get_ind_dm0(b=%d, bp=%d, charge=%d) = %d (ib=%d, ibp=%d)\n",   b, bp, charge, result, ib, ibp);
+        }
+        return result;
+    }
+
+    int get_ind_dm1(int c, int b, int bcharge) {
+        // Replicate Python logic for mapping transitions to indices
+        int ic = dictdm[c];
+        int ib = dictdm[b];
+        int index = ic * lenlst[bcharge] + ib + shiftlst1[bcharge];
+        if (verbosity > 3) {
+            printf("DEBUG-get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d (ic=%d, ib=%d)\n",   c, b, bcharge, index, ic, ib);
+        }
+        return index;
+    }
+
+
 
 
     void init_map_dm0() {
@@ -417,7 +451,7 @@ public:
         // Diagonal elements
         for(int iq = 0; iq < nq; iq++) {
             for(int b : states_by_charge[iq]) {
-                int bbp = get_ind_dm0_0(b, b, iq);
+                int bbp = get_ind_dm0(b, b, iq);
                 if(verbosity > 3) printf("PauliSolver::set_mapdm() diag b,iq,bbp,counter %d %d %d %d \n", b, iq, bbp, counter);
                 mapdm0[bbp] = counter++;
             }
@@ -431,11 +465,11 @@ public:
                     int b = states_by_charge[iq][i];
                     int bp = states_by_charge[iq][j];
                     
-                    int bpb = get_ind_dm0_0(bp, b, iq);
+                    int bpb = get_ind_dm0(bp, b, iq);
                     if(verbosity > 3) printf("PauliSolver::set_mapdm() offdiag b,iq,bbp,counter %d %d %d %d \n", bp, iq, bpb, counter);
                     mapdm0[bpb] = counter;
                     
-                    int bbp = get_ind_dm0_0(b, bp, iq);
+                    int bbp = get_ind_dm0(b, bp, iq);
                     if(verbosity > 3) printf("PauliSolver::set_mapdm() offdiag b,iq,bbp,counter %d %d %d %d \n", b, iq, bbp, counter);
                     mapdm0[bbp] = counter++;
                 }
@@ -482,7 +516,10 @@ public:
 
     void init_state_ordering() {
         if(verbosity > 3) printf("PauliSolver::init_state_ordering()\n");
-        const int n = params.nstates;
+        const int n = states_by_charge.empty() ? 0 :
+            std::accumulate(states_by_charge.begin(), states_by_charge.end(), 0,
+                [](int sum, const std::vector<int>& vec) { return sum + static_cast<int>(vec.size()); });
+        params.nstates = n;
         state_order.resize(n);
         state_order_inv.resize(n);
         int idx = 0;
@@ -568,8 +605,9 @@ public:
         const int n = params.nstates;
         ndm1 = count_valid_transitions(); 
         //if(verbosity > 3)printf("PauliSolver::generate_fct_compact() ndm1 = %d\n", ndm1);
-        pauli_factors_compact = new double[params.nleads * ndm1 * 2]();   // Allocate compact array
-        memset(pauli_factors_compact, 0, params.nleads * ndm1 * 2 * sizeof(double));
+        n_pauli_factors_compact = params.nleads * ndm1 * 2;
+        pauli_factors_compact = new double[n_pauli_factors_compact]();   // Allocate compact array
+        memset(pauli_factors_compact, 0, n_pauli_factors_compact * sizeof(double));
 
         int n2 = n * n;
         
@@ -653,24 +691,6 @@ public:
         
     }
 
-    // In cpp/pauli_solver.hpp, update the debug prints
-    int get_ind_dm0(int b, int bp, int charge) {
-        // Replicate Python logic for mapping state pairs to indices
-        int index = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
-        if (verbosity > 3) {
-            printf("PauliSolver::get_ind_dm0(b=%d, bp=%d, charge=%d) = %d\n", b, bp, charge, index);
-        }
-        return index;
-    }
-
-    int get_ind_dm1(int c, int b, int bcharge) {
-        // Replicate Python logic for mapping transitions to indices
-        int index = dictdm[c] * lenlst[bcharge] + dictdm[b] + shiftlst1[bcharge];
-        //if (verbosity > 3) {printf("PauliSolver::get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d\n", c, b, bcharge, index);}
-        return index;
-    }
-
-
     /// @brief Adds a real value (fctp) to the matrix element connecting the states bb and aa in the Pauli kernel. 
     /// In addition, adds another real value (fctm) to the diagonal element kern[bb, bb].
     /// @param fctm Value to be added to the diagonal element kern[bb, bb].
@@ -680,13 +700,29 @@ public:
     /// @note Modifies the internal kernel matrix.
     void set_matrix_element_pauli(double fctm, double fctp, int bb, int aa) {
         int n = params.nstates;
-        kernel[bb*n+bb] += fctm; // diagonal
-        //kernel[aa*n+aa] += fctm; // mirror diagonal contribution (matching Python QmeQ) - this shit should be removed
-        kernel[bb*n+aa] += fctp; // off-diagonal
+        // Only apply matrix updates if indices are within bounds
+        // This matches Python's behavior of silently ignoring out-of-bounds indices
+        if(bb < n && aa < n) {
+            // Add the contributions to the kernel matrix
+            kernel[bb*n+bb] += fctm; // diagonal
+            kernel[bb*n+aa] += fctp; // off-diagonal
+        } else if(verbosity > 2) {
+            printf("INFO: Skipping matrix element (n=%d, bb=%d, aa=%d) - indices out of bounds\n", n, bb, aa);
+        }
     }
 
     inline int index_paulifct        (int l, int i, int j){ return 2*( j + params.nstates*( i + l*params.nstates )); }
-    inline int index_paulifct_compact(int l, int i       ){ return 2*( i + ndm1*l); }
+    inline int index_paulifct_compact(int l, int i) { 
+        int idx = 2*( i + ndm1*l);
+        if(verbosity > 3) {
+            printf("DEBUG-index_paulifct_compact(l=%d, i=%d) = %d (ndm1=%d, array_size=%i)\n",  l, i, idx, ndm1, n_pauli_factors_compact);
+            // Check if index is out of bounds
+            if (idx < 0 || idx + 1 >= n_pauli_factors_compact) {
+                printf("ERROR: index_paulifct_compact result %d is out of bounds for array size %i\n", idx, n_pauli_factors_compact);
+            }
+        }
+        return idx;
+    }
 
 
 /*
@@ -805,11 +841,34 @@ public:
     }
 
     void generate_coupling_terms_compact(int b) {
-        //if(verbosity > 3){ printf("#\n ======== generate_coupling_terms() b: %i \n", b ); }
         const int n = params.nstates;
-        int Q = count_electrons(b);
-        //const int bb = b * n + b;
-        const int bb = b;
+        const int Q = count_electrons(b);
+        const int max_charge = states_by_charge.size() - 1;
+
+        // Get charge-1 and charge+1 states with bounds checking
+        auto* states_prev = (Q > 0) ? &states_by_charge[Q-1] : nullptr;
+        auto* states_next = (Q < max_charge) ? &states_by_charge[Q+1] : nullptr;
+
+        if(verbosity > 1) {
+            printf("\nPauliSolver::generate_coupling_terms_compact() b=%d Q=%d\n", b, Q);
+            printf("Q-1 states: ");
+            if(states_prev) {
+                printf("[%zu]: [ ", states_prev->size());
+                for(auto s : *states_prev) printf("%d ", s);
+            } else {
+                printf("<none>");
+            }
+            printf("\nQ+1 states: ");
+            if(states_next) {
+                printf("[%zu]: [ ", states_next->size());
+                for(auto s : *states_next) printf("%d ", s);
+            } else {
+                printf("<none>");
+            }
+            printf("]\n");
+        }
+
+        int bb = get_ind_dm0(b, b, Q);  // Transform to density matrix index, matching Python approach
 
         if(verbosity > 3){  printf("PauliSolver::generate_coupling_terms_compact() b: %i Q: %i \n", b, Q );  }
 
@@ -826,10 +885,18 @@ public:
                 int aa = get_ind_dm0(a, a, Qlower);
                 int ba = get_ind_dm1(b, a, Qlower);
                 
+                if(verbosity > 3) {
+                    printf("DEBUG-INDEX-LOWER: state(b)=%d, other(a)=%d, charge(Q)=%d, aa=%d, ba=%d\n", b, a, Q, aa, ba);
+                    printf("DEBUG-INDEX-LOWER: dictdm[b]=%d, dictdm[a]=%d, shiftlst0[%d]=%d, lenlst[%d]=%d\n",  dictdm[b], dictdm[a], Qlower, shiftlst0[Qlower], Qlower, lenlst[Qlower]);
+                }
+                
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
                     //int idx = l * n2 * 2 + b * n * 2 + a * 2;
                     int idx = index_paulifct_compact( l, ba );
+                    if(verbosity > 3) {
+                        printf("DEBUG-FACTOR-LOWER: lead=%d, ba=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, ba, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);
+                    }
                     fctm -= pauli_factors_compact[idx + 1];
                     fctp += pauli_factors_compact[idx + 0];
                 }
@@ -848,10 +915,19 @@ public:
                 //int cc = c;
                 int cc = get_ind_dm0(c, c, Qhigher );
                 int cb = get_ind_dm1(c, b, Q       );
+                
+                if(verbosity > 3) {
+                    printf("DEBUG-INDEX-HIGHER: state(b)=%d, other(c)=%d, charge(Q)=%d, cc=%d, cb=%d\n", b, c, Q, cc, cb);
+                    printf("DEBUG-INDEX-HIGHER: dictdm[b]=%d, dictdm[c]=%d, shiftlst0[%d]=%d, shiftlst1[%d]=%d\n",  dictdm[b], dictdm[c], Qhigher, shiftlst0[Qhigher], Q, shiftlst1[Q]);
+                }
+                
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
                     //int idx = l * n2 * 2 + c * n * 2 + b * 2;
                     int idx = index_paulifct_compact( l, cb );
+                    if(verbosity > 3) {
+                        printf("DEBUG-FACTOR-HIGHER: lead=%d, cb=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, cb, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);
+                    }
                     fctm -= pauli_factors_compact[idx + 0];
                     fctp += pauli_factors_compact[idx + 1];
                 }

@@ -159,9 +159,13 @@ class ApproachPauli(Approach):
             aa = si.get_ind_dm0(a, a, acharge)
             ba = si.get_ind_dm1(b, a, acharge)
             #if self.verbosity > verb:  print(f"LOWER: state:{b} other:{a} aa:{aa} ba:{ba}")
+            if self.verbosity > 3:
+                print(f"DEBUG-INDEX-LOWER: state(b)={b}, other(a)={a}, charge(Q)={bcharge}, aa={aa}, ba={ba}")
+                print(f"DEBUG-INDEX-LOWER: si.dictdm[b]={si.dictdm[b]}, si.dictdm[a]={si.dictdm[a]}, si.shiftlst0[{bcharge}]={si.shiftlst0[bcharge]}, si.lenlst[{bcharge}]={si.lenlst[bcharge]}")
             fctm, fctp = 0, 0
             for l in range(nleads):
-                #if self.verbosity > 3:  print(f"DEBUG:   lead:{l} idx:{l},{ba}")
+                if self.verbosity > 3:
+                    print(f"DEBUG-FACTOR-LOWER: lead={l}, ba={ba}, factors=[{paulifct[l, ba, 0]:.6f}, {paulifct[l, ba, 1]:.6f}]")
                 fctm -= paulifct[l, ba, 1]  # Electron leaving
                 fctp += paulifct[l, ba, 0]  # Electron entering
             verb_print_(3,"set_matrix_element_pauli() LOWER  [%i,%i] fctm: %.6f fctp: %.6f     bb: %i aa: %i" %(b, a, fctm, fctp, bb, aa ) ); 
@@ -174,9 +178,13 @@ class ApproachPauli(Approach):
             cc = si.get_ind_dm0(c, c, ccharge)
             cb = si.get_ind_dm1(c, b, bcharge)
             #if self.verbosity > verb: print(f"HIGHER: state:{b} other:{c} cc:{cc} cb:{cb}")
+            if self.verbosity > 3:
+                print(f"DEBUG-INDEX-HIGHER: state(b)={b}, other(c)={c}, charge(Q)={bcharge}, cc={cc}, cb={cb}")
+                print(f"DEBUG-INDEX-HIGHER: si.dictdm[b]={si.dictdm[b]}, si.dictdm[c]={si.dictdm[c]}, si.shiftlst0[{ccharge}]={si.shiftlst0[ccharge]}, si.shiftlst1[{bcharge}]={si.shiftlst1[bcharge]}")
             fctm, fctp = 0, 0
             for l in range(nleads):
-                #if self.verbosity > 3: print(f"DEBUG:   lead:{l} idx:{l},{cb}")
+                if self.verbosity > 3:
+                    print(f"DEBUG-FACTOR-HIGHER: lead={l}, cb={cb}, factors=[{paulifct[l, cb, 0]:.6f}, {paulifct[l, cb, 1]:.6f}]")
                 fctm -= paulifct[l, cb, 0]  # Electron entering
                 fctp += paulifct[l, cb, 1]  # Electron leaving
             verb_print_(3,"set_matrix_element_pauli() HIGHER [%i,%i] fctm: %.6f fctp: %.6f      bb: %i cc: %i" %(b, c, fctm, fctp,    bb, cc ) ); 
