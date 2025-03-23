@@ -64,7 +64,7 @@ coeffE = 0.4
 coeffT = 0.3
 
 
-verbosity = 4
+verbosity = 2
 
 # ==== Functions
 

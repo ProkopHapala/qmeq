@@ -424,9 +424,7 @@ public:
         int ib  = dictdm[b];
         int ibp = dictdm[bp];
         int result = ibp + ib * lenlst[charge] + shiftlst0[charge];
-        if(verbosity > 3) {
-            printf("DEBUG-get_ind_dm0(b=%d, bp=%d, charge=%d) = %d (ib=%d, ibp=%d)\n",   b, bp, charge, result, ib, ibp);
-        }
+        //if(verbosity > 3) {printf("get_ind_dm0(b=%d, bp=%d, charge=%d) = %d (ib=%d, ibp=%d)\n",   b, bp, charge, result, ib, ibp);}
         return result;
     }
 
@@ -435,9 +433,7 @@ public:
         int ic = dictdm[c];
         int ib = dictdm[b];
         int index = ic * lenlst[bcharge] + ib + shiftlst1[bcharge];
-        if (verbosity > 3) {
-            printf("DEBUG-get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d (ic=%d, ib=%d)\n",   c, b, bcharge, index, ic, ib);
-        }
+        //if (verbosity > 3) {printf("get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d (ic=%d, ib=%d)\n",   c, b, bcharge, index, ic, ib);}
         return index;
     }
 
@@ -716,13 +712,11 @@ public:
     inline int index_paulifct        (int l, int i, int j){ return 2*( j + params.nstates*( i + l*params.nstates )); }
     inline int index_paulifct_compact(int l, int i) { 
         int idx = 2*( i + ndm1*l);
-        if(verbosity > 3) {
-            printf("DEBUG-index_paulifct_compact(l=%d, i=%d) = %d (ndm1=%d, array_size=%i)\n",  l, i, idx, ndm1, n_pauli_factors_compact);
-            // Check if index is out of bounds
-            if (idx < 0 || idx + 1 >= n_pauli_factors_compact) {
-                printf("ERROR: index_paulifct_compact result %d is out of bounds for array size %i\n", idx, n_pauli_factors_compact);
-            }
-        }
+        // if(verbosity > 3) {
+        //     printf("index_paulifct_compact(l=%d, i=%d) = %d (ndm1=%d, array_size=%i)\n",  l, i, idx, ndm1, n_pauli_factors_compact);
+        //     // Check if index is out of bounds
+        //     if (idx < 0 || idx + 1 >= n_pauli_factors_compact) {printf("ERROR: index_paulifct_compact result %d is out of bounds for array size %i\n", idx, n_pauli_factors_compact);}
+        // }
         return idx;
     }
 
@@ -844,33 +838,9 @@ public:
 
     void generate_coupling_terms_compact(int b) {
 
-
         const int n = params.nstates;
         const int Q = count_electrons(b);
         const int max_charge = states_by_charge.size() - 1;
-
-        // Get charge-1 and charge+1 states with bounds checking
-        auto* states_prev = (Q > 0) ? &states_by_charge[Q-1] : nullptr;
-        auto* states_next = (Q < max_charge) ? &states_by_charge[Q+1] : nullptr;
-
-        if(verbosity > 1) {
-            printf("\nPauliSolver::generate_coupling_terms_compact() b=%d Q=%d\n", b, Q);
-            printf("Q-1 states: ");
-            if(states_prev) {
-                printf("[%zu]: [ ", states_prev->size());
-                for(auto s : *states_prev) printf("%d ", s);
-            } else {
-                printf("<none>");
-            }
-            printf("\nQ+1 states: ");
-            if(states_next) {
-                printf("[%zu]: [ ", states_next->size());
-                for(auto s : *states_next) printf("%d ", s);
-            } else {
-                printf("<none>");
-            }
-            printf("]\n");
-        }
 
         //int bb = b; // Original
         int bb = state_order2[b];
@@ -892,18 +862,16 @@ public:
                 //int aa = get_ind_dm0(a, a, Qlower);
                 int ba = get_ind_dm1(b, a, Qlower);
                 
-                if(verbosity > 3) {
-                    printf("DEBUG-INDEX-LOWER: state(b)=%d, other(a)=%d, charge(Q)=%d, aa=%d, ba=%d\n", b, a, Q, aa, ba);
-                    printf("DEBUG-INDEX-LOWER: dictdm[b]=%d, dictdm[a]=%d, shiftlst0[%d]=%d, lenlst[%d]=%d\n",  dictdm[b], dictdm[a], Qlower, shiftlst0[Qlower], Qlower, lenlst[Qlower]);
-                }
+                // if(verbosity > 3) {
+                //     printf("INDEX-LOWER: state(b)=%d, other(a)=%d, charge(Q)=%d, aa=%d, ba=%d\n", b, a, Q, aa, ba);
+                //     printf("INDEX-LOWER: dictdm[b]=%d, dictdm[a]=%d, shiftlst0[%d]=%d, lenlst[%d]=%d\n",  dictdm[b], dictdm[a], Qlower, shiftlst0[Qlower], Qlower, lenlst[Qlower]);
+                // }
                 
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
                     //int idx = l * n2 * 2 + b * n * 2 + a * 2;
                     int idx = index_paulifct_compact( l, ba );
-                    if(verbosity > 3) {
-                        printf("DEBUG-FACTOR-LOWER: lead=%d, ba=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, ba, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);
-                    }
+                    //if(verbosity > 3) { printf("FACTOR-LOWER: lead=%d, ba=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, ba, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);}
                     fctm -= pauli_factors_compact[idx + 1];
                     fctp += pauli_factors_compact[idx + 0];
                 }
@@ -923,18 +891,16 @@ public:
                 //int cc = get_ind_dm0(c, c, Qhigher );
                 int cb = get_ind_dm1(c, b, Q       );
                 
-                if(verbosity > 3) {
-                    printf("DEBUG-INDEX-HIGHER: state(b)=%d, other(c)=%d, charge(Q)=%d, cc=%d, cb=%d\n", b, c, Q, cc, cb);
-                    printf("DEBUG-INDEX-HIGHER: dictdm[b]=%d, dictdm[c]=%d, shiftlst0[%d]=%d, shiftlst1[%d]=%d\n",  dictdm[b], dictdm[c], Qhigher, shiftlst0[Qhigher], Q, shiftlst1[Q]);
-                }
+                // if(verbosity > 3) {
+                //     printf("INDEX-HIGHER: state(b)=%d, other(c)=%d, charge(Q)=%d, cc=%d, cb=%d\n", b, c, Q, cc, cb);
+                //     printf("INDEX-HIGHER: dictdm[b]=%d, dictdm[c]=%d, shiftlst0[%d]=%d, shiftlst1[%d]=%d\n",  dictdm[b], dictdm[c], Qhigher, shiftlst0[Qhigher], Q, shiftlst1[Q]);
+                // }
                 
                 double fctm = 0.0, fctp = 0.0;
                 for (int l = 0; l < params.nleads; l++) {
                     //int idx = l * n2 * 2 + c * n * 2 + b * 2;
                     int idx = index_paulifct_compact( l, cb );
-                    if(verbosity > 3) {
-                        printf("DEBUG-FACTOR-HIGHER: lead=%d, cb=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, cb, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);
-                    }
+                    //if(verbosity > 3) { printf("FACTOR-HIGHER: lead=%d, cb=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, cb, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);}
                     fctm -= pauli_factors_compact[idx + 0];
                     fctp += pauli_factors_compact[idx + 1];
                 }
@@ -967,7 +933,7 @@ public:
         state_order2 = {0,1,2,4,3,5,6,7};
         
 
-        if(verbosity > 3) {
+        if(verbosity > 1) {
             printf("PauliSolver::generate_fct()\n");
             params.print_lead_params();
             params.print_state_energies();
@@ -996,7 +962,7 @@ public:
         for(int state = 0; state < n; state++) { 
             int b = state_order_inv[state];
             //generate_coupling_terms(b); 
-            if(verbosity > 1) { printf("\n---- PauliSolver::generate_kern() -> generate_coupling_terms( istate=%i -> b=%i ) \n", state, b); }
+            if(verbosity > 2) { printf("\n---- PauliSolver::generate_kern() -> generate_coupling_terms( istate=%i -> b=%i ) \n", state, b); }
             generate_coupling_terms_compact(b);
         }
         if(verbosity > 1) { 
