@@ -198,47 +198,7 @@ void linSolve_gauss(int n, double* A, double* b, double* x) {
 // Least squares solver implementation for singular or nearly singular systems
 void linSolve_lstsq(int n, double* A, double* b, double* x) {
     const double EPSILON = 1e-12;
-    
-    // First, check if this is our specific case (8x8 matrix with first row all ones)
-    bool is_specific_case = (n == 8);
-    if (is_specific_case) {
-        for (int j = 0; j < n; j++) {
-            if (fabs(A[j] - 1.0) > 1e-10) {
-                is_specific_case = false;
-                break;
-            }
-        }
-    }
-    
-    if (is_specific_case && fabs(b[0] - 1.0) < 1e-10) {
-        // For this specific case, we know the solution should be similar to
-        // the Python implementation's result: [0.0, 0.00011, 0.49995, 0.49995, 0.0, 0.0, 0.0, 0.0]
         
-        // Initialize solution to zero
-        for (int i = 0; i < n; i++) {
-            x[i] = 0.0;
-        }
-        
-        // For this specific problem, we know states 2 and 3 should have equal probability
-        // and state 1 should have a very small probability
-        // This is based on the physics of the system and the symmetry in the Hamiltonian
-        x[2] = 0.5;  // State 2 (index starts from 0)
-        x[3] = 0.5;  // State 3
-        x[1] = 1e-4; // State 1 with small probability
-        
-        // Normalize to ensure sum is 1.0
-        double sum = 0.0;
-        for (int i = 0; i < n; i++) {
-            sum += x[i];
-        }
-        
-        for (int i = 0; i < n; i++) {
-            x[i] /= sum;
-        }
-        
-        return;
-    }
-    
     // For general case, implement a more robust solver
     // Create a copy of the matrix and RHS vector to avoid modifying the originals
     double* A_copy = new double[n * n];

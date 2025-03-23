@@ -160,7 +160,7 @@ struct SolverParams {
     LeadParams* leads=0; // Lead parameters [nleads]
     double* coupling=0;  // Coupling matrix elements [nleads * nstates * nstates]
     int* state_order=0;  // State order [nstates]
-    int* state_order2=0; // State order [nstates]
+    //int* state_order2=0; // State order [nstates]
     
     // Constructor
     SolverParams() : nSingle(0), nstates(0), nleads(0) {}
@@ -409,15 +409,6 @@ public:
         return 1.0/(1.0 + exp((energy_diff - mu)/temp));
     }
 
-    // int get_ind_dm0(int b, int bp, int charge) {
-    //     // Replicate Python logic for mapping state pairs to indices
-    //     int index = lenlst[charge] * dictdm[b] + dictdm[bp] + shiftlst0[charge];
-    //     if (verbosity > 3) {
-    //         printf("PauliSolver::get_ind_dm0(b=%d, bp=%d, charge=%d) = %d\n", b, bp, charge, index);
-    //     }
-    //     return index;
-    // }
-
     //inline int get_ind_dm0_0( int i, int iq ){ return dictdm[i] + shiftlst0[iq]; }
     inline int get_ind_dm0(int b, int bp, int charge) {
         // Mirror Python's get_ind_dm0 from indexing.py
@@ -638,57 +629,6 @@ public:
         }
     }
 
-    // Generate Pauli factors for transitions between states
-    void generate_fct() {        
-        const int n  = params.nstates;
-        const int n2 = n * n;
-        memset(pauli_factors, 0, params.nleads * n * n * 2 * sizeof(double));
-        
-        // Make sure states are organized by charge
-        if(states_by_charge.empty()) { init_states_by_charge();}
-        // Iterate through charge states (like Python's implementation)
-        for(int charge = 0; charge < states_by_charge.size() - 1; charge++) {
-            int next_charge = charge + 1;
-            
-            // Iterate through states in current and next charge state
-            for(int c : states_by_charge[next_charge]) {
-                for(int b : states_by_charge[charge]) {
-                    double energy_diff = params.energies[c] - params.energies[b];
-                    
-                    // For each lead
-                    for(int l = 0; l < params.nleads; l++) {
-                        const int idx = l * n2 * 2 + c * n * 2 + b * 2;
-                        
-                        // Get the site that changed in this transition
-                        int changed_site = get_changed_site(c, b);
-                        
-                        // Calculate coupling strength
-                        double tij =  params.coupling[l * n2 + b * n + c];
-                        double tji =  params.coupling[l * n2 + c * n + b];
-                        double coupling_val = tij * tji; 
-                                            
-                        // Include lead parameters
-                        const LeadParams& lead = params.leads[l];
-                        double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
-                        
-                        // Store factors for both directions
-                        // Note: Python's func_pauli multiplies by 2π and coupling already includes gamma/π
-                        pauli_factors[idx + 0] = coupling_val *        fermi  * 2 * PI; // Forward
-                        pauli_factors[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI; // Backward
-                        
-                        if(verbosity > 3){
-                            //if( (l==1) && (c==3) && (b==1) ){
-                            //    printf("generate_fct() l: %d i: %d j: %d E_diff: %.6f coupling: %.6f tij: %.6f tji: %.6f fermi: %.6f factors:[ %.6f , %.6f ]\n",   l, c, b, energy_diff, coupling_val, tij, tji, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
-                            //}
-                            //printf("generate_fct() l: %d i: %d j: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f , %.6f ]\n",   l, c, b, energy_diff, coupling_val, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]);
-                        }
-                    }
-                }
-            }
-        }
-        
-    }
-
     /// @brief Adds a real value (fctp) to the matrix element connecting the states bb and aa in the Pauli kernel. 
     /// In addition, adds another real value (fctm) to the diagonal element kern[bb, bb].
     /// @param fctm Value to be added to the diagonal element kern[bb, bb].
@@ -757,84 +697,6 @@ public:
                 fctp += paulifct[l, cb, 1]  # Electron leaving
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
 */
-
-
-    void generate_coupling_terms(int b) {
-        const int n = params.nstates;
-        int Q = count_electrons(b);
-        const int bb = b;
-
-        if(verbosity > 3) {
-            printf("\n ==== C++ pauli_solver.hpp PauliSolver::generate_coupling_terms() b: %d Q: %d\n", b, Q);
-            //printf("PauliSolver::generate_coupling_terms() b: %d bp: %d  bcharge: %d statesdm: ", b, b, Q);
-        }
-
-        int n2 = n * n;
-
-        if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
-            int Qlower=Q-1;
-            if(verbosity > 3){ printf("generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
-            
-            for (int a : states_by_charge[Qlower]) {
-                //if (get_changed_site(b, a) == -1) continue;
-
-                int aa = a; // Original
-                //int aa = get_ind_dm0(a, a, Qlower);
-                //int ba = get_ind_dm1(b, a, Qlower);
-                
-                double fctm = 0.0, fctp = 0.0;
-                for (int l = 0; l < params.nleads; l++) {
-                    int idx = index_paulifct( l, b, a);
-                    double factor_m = pauli_factors[idx + 1];
-                    double factor_p = pauli_factors[idx + 0];
-                    fctm -= factor_m;
-                    fctp += factor_p;
-                    
-                    if(verbosity > 3) {
-                        double energy_diff = params.energies[b] - params.energies[a];
-                        double coupling_val = params.coupling[l * n2 + a * n + b] * params.coupling[l * n2 + b * n + a];
-                        double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
-                        printf("PauliSolver::generate_coupling_terms() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n",  l, b, a, energy_diff, coupling_val, fermi, factor_p, factor_m);
-                    }
-                }
-                //int aa = a * n + a;
-                
-                if(verbosity > 3){ printf("set_matrix_element_pauli() LOWER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, a, fctm, fctp, bb, aa); }
-                set_matrix_element_pauli(fctm, fctp, bb, aa );
-            }
-        }        
-        if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
-            int Qhigher=Q+1;
-            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
-            for (int c : states_by_charge[Qhigher]) {
-                //if (get_changed_site(b, c) == -1) continue;
-
-                int cc = c;
-                //int cc = si.get_ind_dm0(c, c, Qhigher );
-                //int cb = si.get_ind_dm1(c, b, Q       );
-                double fctm = 0.0, fctp = 0.0;
-                for (int l = 0; l < params.nleads; l++) {
-                    int idx = index_paulifct( l, c, b );
-                    double factor_m = pauli_factors[idx + 0];
-                    double factor_p = pauli_factors[idx + 1];
-                    fctm -= factor_m;
-                    fctp += factor_p;
-                    
-                    if(verbosity > 3) {
-                        double energy_diff = params.energies[c] - params.energies[b];
-                        double coupling_val = params.coupling[l * n2 + b * n + c] * params.coupling[l * n2 + c * n + b];
-                        double fermi = fermi_func(energy_diff, params.leads[l].mu, params.leads[l].temp);
-                        printf("PauliSolver::generate_coupling_terms() l:%d i:%d j:%d E_diff:%.6f coupling:%.6f fermi:%.6f factors:[%.6f, %.6f]\n", l, c, b, energy_diff, coupling_val, fermi, factor_m, factor_p);
-                    }
-                }
-                //int cc = c * n + c;
-                if(verbosity > 3){ printf("set_matrix_element_pauli() HIGHER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, c, fctm, fctp, bb, cc); }
-                set_matrix_element_pauli( fctm, fctp, bb, cc );
-            }
-        }
-        //if(verbosity > 3) { printf( "generate_coupling_terms() b: %i kernel: \n", b ); print_matrix(kernel, n, n); }
-
-    }
 
     void generate_coupling_terms_compact(int b) {
 
@@ -920,7 +782,7 @@ public:
         for(int j = 0; j < n; j++) { kernel[j] = 1.0; }        
         // if(verbosity > 3) {
         //     printf("Phase 2 - After normalization\n");
-        //     print_matrix(kernel, n, n, nullptr, "%.6g");
+        //     print_matrix(kernel, n, n, "%.6g");
         // }
     }
 
@@ -1093,4 +955,3 @@ public:
     const double* get_rhs()           const { return rhs; }
     const double* get_pauli_factors() const { return pauli_factors; }
 };
-
