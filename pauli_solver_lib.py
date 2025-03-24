@@ -187,7 +187,7 @@ class PauliSolver:
     
     def get_coupling(self, solver, NLeads, NStates):
         coupling = np.zeros((NLeads, NStates, NStates))
-        print("get_coupling()", coupling.shape, NLeads*NStates*NStates )
+        #print("get_coupling()", coupling.shape, NLeads*NStates*NStates )
         self.lib.get_coupling(solver, _np_as(coupling, c_double_p))
         return coupling
     

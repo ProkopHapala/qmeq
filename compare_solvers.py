@@ -293,9 +293,9 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True):  # Compare re
     
     diff = np.max(np.abs(qmeq_res['current'] - cpp_res['current']))
     if diff > tol or bPrintSame:
-        print("Current diff :", diff)
         print("Current QmeQ :", qmeq_res['current'])
         print("Current C++  :", cpp_res['current'])
+        print("Current diff :", diff)
         print("Relative diff:", abs(qmeq_res['current'] - cpp_res['current'])/abs(qmeq_res['current']))
     else:
         print(f"Current:   OK (diff({diff}) < tol({tol}))")
@@ -309,7 +309,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True):  # Compare re
     print('  Tba:')
     for lead in range(NLeads):
         print(f'    Lead {lead}:')
-        Lcpp = cpp_res['leads']['Tba'][lead]
+        Lcpp  = cpp_res['leads']['Tba'][lead]
         Lqmeq = qmeq_res['leads']['Tba'][lead]
         diff = np.max(np.abs(Lqmeq - Lcpp))
         if diff > tol or bPrintSame:

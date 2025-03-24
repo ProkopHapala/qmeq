@@ -135,22 +135,21 @@ double calculate_current(void* solver_ptr, int lead_idx) {
 
 // Get the coupling matrix
 double* get_coupling(void* solver_ptr, double* coupling ) {
-    printf("DEBUG: get_coupling() solver_ptr=%p coupling=%p\n", solver_ptr, coupling );
+    //printf("DEBUG: get_coupling() solver_ptr=%p coupling=%p\n", solver_ptr, coupling );
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     int n=solver->params.nleads * solver->params.nstates * solver->params.nstates;
-    printf("DEBUG: get_coupling() solver->params.coupling = %p nleads=%i nstates=%i n=%i\n", solver->params.coupling, solver->params.nleads, solver->params.nstates, n);
+    //printf("DEBUG: get_coupling() solver->params.coupling = %p nleads=%i nstates=%i n=%i\n", solver->params.coupling, solver->params.nleads, solver->params.nstates, n);
     std::memcpy(coupling, solver->params.coupling, n * sizeof(double));
     return coupling;
 }
 
 void get_pauli_factors(void* solver_ptr, double* out_pauli_factors) {
-    printf("DEBUG: get_pauli_factors() solver_ptr=%p\n", solver_ptr);
+    //printf("DEBUG: get_pauli_factors() solver_ptr=%p\n", solver_ptr);
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     const double* pauli_factors = solver->get_pauli_factors();
-    printf("DEBUG: get_pauli_factors()pauli_factors=%p \n", pauli_factors );
-    DEBUG
+    //printf("DEBUG: get_pauli_factors()pauli_factors=%p \n", pauli_factors );
     int n = solver->params.nleads * solver->ndm1 * 2;
-    printf("DEBUG: get_pauli_factors() solver_ptr=%p pauli_factors=%p n=%i\n", solver_ptr, pauli_factors, n);
+    //printf("DEBUG: get_pauli_factors() solver_ptr=%p pauli_factors=%p n=%i\n", solver_ptr, pauli_factors, n);
     std::memcpy(out_pauli_factors, pauli_factors, n * sizeof(double));
 }
 
