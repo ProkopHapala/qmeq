@@ -71,6 +71,9 @@ class PauliSolver:
         
         self.lib.get_coupling.argtypes = [ctypes.c_void_p, c_double_p]
         self.lib.get_coupling.restype  = None
+
+        self.lib.get_pauli_factors.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_pauli_factors.restype  = None
         
         #print("PauliSolver::_setup_function_signatures() DONE")
     
@@ -190,7 +193,7 @@ class PauliSolver:
     
     # void get_pauli_factors(void* solver_ptr, double* out_pauli_factors) {
     def get_pauli_factors(self, solver, NLeads, NStates):
-        pauli_factors = np.zeros((NLeads, NStates, NStates))
+        pauli_factors = np.zeros(( NLeads, NStates*2, 2))
         self.lib.get_pauli_factors(solver, _np_as(pauli_factors, c_double_p))
         return pauli_factors
     

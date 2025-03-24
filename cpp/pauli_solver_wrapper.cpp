@@ -144,9 +144,13 @@ double* get_coupling(void* solver_ptr, double* coupling ) {
 }
 
 void get_pauli_factors(void* solver_ptr, double* out_pauli_factors) {
+    printf("DEBUG: get_pauli_factors() solver_ptr=%p\n", solver_ptr);
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     const double* pauli_factors = solver->get_pauli_factors();
+    printf("DEBUG: get_pauli_factors()pauli_factors=%p \n", pauli_factors );
+    DEBUG
     int n = solver->params.nleads * solver->ndm1 * 2;
+    printf("DEBUG: get_pauli_factors() solver_ptr=%p pauli_factors=%p n=%i\n", solver_ptr, pauli_factors, n);
     std::memcpy(out_pauli_factors, pauli_factors, n * sizeof(double));
 }
 

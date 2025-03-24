@@ -130,7 +130,7 @@ class ApproachPauli(Approach):
             print(kh.kern)
             np.set_printoptions(precision=5)  # Reset to default
         print("===== ApproachPauli.generate_kern() DONE ====="  )
-        raise ValueError("DEBUG TERMINATION")
+        #raise ValueError("DEBUG TERMINATION")
 
     def generate_coupling_terms(self, b, bp, bcharge):
         verb_print_(3,f"ApproachPauli.generate_coupling_terms() b: {b} bp: {bp}  bcharge: {bcharge} statesdm: {self.si.statesdm}", self.verbosity)

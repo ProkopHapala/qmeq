@@ -341,13 +341,13 @@ def construct_Tba(leads, tleads, Tba_=None):
 class PauliSolver {
 public:
     SolverParams params;
-    //int nstates;         // Number of states
-    double* kernel;        // Kernel matrix [nstates * nstates]
-    double* rhs;           // Right-hand side vector [nstates]
-    double* probabilities; // State probabilities [nstates]
-    double* pauli_factors; // Pauli factors for transitions [nleads * nstates * nstates * 2]
-    double* pauli_factors_compact;  // [nleads][ndm1][2]
-    int n_pauli_factors_compact;    // Number of Pauli factors in compact array
+    //int nstates;                     // Number of states
+    double* kernel=0;                  // Kernel matrix [nstates * nstates]
+    double* rhs=0;                     // Right-hand side vector [nstates]
+    double* probabilities=0;           // State probabilities [nstates]
+    //double* pauli_factors;           // Pauli factors for transitions [nleads * nstates * nstates * 2]
+    double* pauli_factors_compact=0;   // [nleads][ndm1][2]
+    int n_pauli_factors_compact=0;     // Number of Pauli factors in compact array
     int ndm1;                       // Number of valid transitions (states differing by 1 charge)
     int verbosity;        // Verbosity level for debugging
     std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
@@ -833,7 +833,7 @@ public:
             printf("===== PauliSolver::generate_kern() DONE \n");
         }
 
-        exit(0);
+        //exit(0);
         //normalize_kernel();
         //if(verbosity > 0) { print_matrix(kernel, n, n, "Phase 2 - After normalization"); }
     }
@@ -883,12 +883,53 @@ public:
         delete[] rhs;
     }
 
+/*
+    void generate_current(int b, double* rho, double* current) {
+        const int n = params.nstates;
+        const int Q = count_electrons(b);
+        const int bb = state_order2[b]; // Use consistent state ordering
+        if(verbosity > 3) { printf("PauliSolver::generate_current() b:%d Q:%d\n", b, Q);}
+        // Zero initialize currents
+        for(int l=0; l<params.nleads; l++) current[l] = 0.0;
+        // Handle transitions from lower charge states (a -> b)
+        if(Q > 0) {
+            const int Qlower = Q-1;
+            for(int a : states_by_charge[Qlower]) {
+                const int aa = state_order2[a];
+                const int ba = get_ind_dm1(b, a, Qlower);
+                for(int l=0; l<params.nleads; l++) {
+                    const int idx = index_paulifct_compact(l, ba);
+                    const double fct_enter = pauli_factors_compact[idx];
+                    const double fct_leave = pauli_factors_compact[idx+1];
+                    current[l] += (rho[bb] - rho[aa]) * (fct_enter - fct_leave);
+                    if(verbosity > 3) { printf("l:%d a:%d ba:%d idx:%d fct+:%.6f fct-:%.6f\n", l, a, ba, idx, fct_enter, fct_leave); }
+                }
+            }
+        }
+        // Handle transitions to higher charge states (b -> c)
+        if(Q < states_by_charge.size()-1) {
+            const int Qhigher = Q+1;
+            for(int c : states_by_charge[Qhigher]) {
+                const int cc = state_order2[c];
+                const int cb = get_ind_dm1(c, b, Q);
+                for(int l=0; l<params.nleads; l++) {
+                    const int idx = index_paulifct_compact(l, cb);
+                    const double fct_enter = pauli_factors_compact[idx];
+                    const double fct_leave = pauli_factors_compact[idx+1];
+                    current[l] += (rho[cc] - rho[bb]) * (fct_enter - fct_leave);
+                    if(verbosity > 3) {printf("l:%d c:%d cb:%d idx:%d fct+:%.6f fct-:%.6f\n", l, c, cb, idx, fct_enter, fct_leave); }
+                }
+            }
+        }
+    }
+*/
+
     PauliSolver(const SolverParams& p, int verb = 0) : params(p), verbosity(verb) {
         const int n = params.nstates;
         kernel = new double[n * n];
         rhs = new double[n];
         probabilities = new double[n];
-        pauli_factors = new double[params.nleads * n * n * 2];
+        //pauli_factors = new double[params.nleads * n * n * 2];
         //printf("DEBUG: PauliSolve() DONE verbosity=%i \n", verbosity);
     }
 
@@ -896,7 +937,8 @@ public:
         delete[] kernel;
         delete[] rhs;
         delete[] probabilities;
-        delete[] pauli_factors;
+        //delete[] pauli_factors;
+        delete[] pauli_factors_compact;
     }
 
     // Solve the master equation
@@ -905,41 +947,40 @@ public:
         solve_kern();     // Then solve it
     }
 
-    // Calculate current through a specific lead
+    // Calculate current through a specific lead using the compact structure
     double generate_current(int lead_idx) {
         if(verbosity > 3) printf("\nDEBUG: generate_current() lead: %d this: %p\n", lead_idx, this);
         
-        const int n = params.nstates;
         double current = 0.0;
-        
-        // Following the Python implementation in qmeq/approach/base/pauli.py
-        // The number of charge states is the size of states_by_charge vector
         const int ncharge = states_by_charge.size();
         
+        // Calculate current for each charge state transition
         for(int charge = 0; charge < ncharge - 1; charge++) {
-            int ccharge = charge + 1;  // Higher charge state (more electrons)
-            int bcharge = charge;      // Lower charge state (fewer electrons)
+            const int charge_higher = charge + 1;
             
-            // Loop through states in the higher charge state
-            for(int c_idx = 0; c_idx < states_by_charge[ccharge].size(); c_idx++) {
-                int c = states_by_charge[ccharge][c_idx];  // State in higher charge state
+            // Handle transitions: lower charge -> higher charge (b -> c)
+            for(int b : states_by_charge[charge]) {
+                const int bb = state_order2[b];
                 
-                // Loop through states in the lower charge state
-                for(int b_idx = 0; b_idx < states_by_charge[bcharge].size(); b_idx++) {
-                    int b = states_by_charge[bcharge][b_idx];  // State in lower charge state
+                for(int c : states_by_charge[charge_higher]) {
+                    const int cc = state_order2[c];
+                    const int cb = get_ind_dm1(c, b, charge);
                     
-                    // Calculate indices for pauli factors
-                    int cb = b * n + c;  // Combined index for transition b->c
+                    // Get factors from compact structure
+                    const int idx = index_paulifct_compact(lead_idx, cb);
+                    const double fct_enter = pauli_factors_compact[idx];     // Electron entering (b -> c)
+                    const double fct_leave = pauli_factors_compact[idx + 1]; // Electron leaving (c -> b)
                     
-                    // Calculate the two terms that contribute to current
-                    double fct1 = probabilities[b] * pauli_factors[lead_idx * n * n * 2 + cb * 2 + 0];  // phi0[bb] * paulifct[l, cb, 0]
-                    double fct2 = -probabilities[c] * pauli_factors[lead_idx * n * n * 2 + cb * 2 + 1];  // -phi0[cc] * paulifct[l, cb, 1]
+                    // Calculate current contribution
+                    double fct1 = probabilities[bb] * fct_enter;   // Electron entering: phi0[bb] * paulifct[l, cb, 0]
+                    double fct2 = -probabilities[cc] * fct_leave;  // Electron leaving: -phi0[cc] * paulifct[l, cb, 1]
+                    double contrib = fct1 + fct2;
                     
-                    // Add contribution to current
-                    current += fct1 + fct2;
+                    current += contrib;
                     
                     if(verbosity > 3) {
-                        printf("DEBUG: generate_current() c:%d b:%d fct1:%.6f fct2:%.6f contrib:%.6f\n", c, b, fct1, fct2, fct1 + fct2);
+                        printf("DEBUG: generate_current() lead:%d c:%d b:%d cb:%d fct1:%.6f fct2:%.6f contrib:%.6f\n", 
+                               lead_idx, c, b, cb, fct1, fct2, contrib);
                     }
                 }
             }
@@ -948,10 +989,53 @@ public:
         return current;
     }
 
+/*
+    def generate_current(self):
+        """
+        Calculates currents using Pauli master equation approach.
+
+        Parameters
+        ----------
+        current : array
+            (Modifies) Values of the current having nleads entries.
+        energy_current : array
+            (Modifies) Values of the energy current having nleads entries.
+        heat_current : array
+            (Modifies) Values of the heat current having nleads entries.
+        """
+        verb_print_(2,"ApproachPauli.generate_current() Calculating currents...")
+        
+        debug_print("DEBUG: ApproachPauli.generate_current()")
+        phi0, E, paulifct, si = self.phi0, self.qd.Ea, self.paulifct, self.si
+        ncharge, nleads, statesdm = si.ncharge, si.nleads, si.statesdm
+
+        current = self.current
+        energy_current = self.energy_current
+
+        for charge in range(ncharge-1):
+            ccharge = charge+1
+            bcharge = charge
+            for c in statesdm[ccharge]:
+                cc = si.get_ind_dm0(c, c, ccharge)
+                for b in statesdm[bcharge]:
+                    bb = si.get_ind_dm0(b, b, bcharge)
+                    cb = si.get_ind_dm1(c, b, bcharge)
+                    for l in range(nleads):
+                        fct1 = +phi0[bb]*paulifct[l, cb, 0]
+                        fct2 = -phi0[cc]*paulifct[l, cb, 1]
+                        current[l] += fct1 + fct2
+                        energy_current[l] += -(E[b]-E[c])*(fct1 + fct2)
+
+        self.heat_current[:] = energy_current - current*self.leads.mulst
+*/
+
+
+
+
     // Getter methods
     const double* get_kernel()        const { return kernel; }
     const double* get_probabilities() const { return probabilities; }
     const double* get_energies()      const { return params.energies; }
     const double* get_rhs()           const { return rhs; }
-    const double* get_pauli_factors() const { return pauli_factors; }
+    const double* get_pauli_factors() const { return pauli_factors_compact; }
 };

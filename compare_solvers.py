@@ -126,7 +126,7 @@ def run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads):  # Compare QmeQ an
             'energies':       system.Ea,
             'probabilities':  system.phi0,
             'kernel':         system.kern,
-            'pauli_factors':  system.paulifct,
+            'pauli_factors':  system.appr.paulifct,
             'leads': {
                 'mu':    system.leads.mulst,
                 'temp':  system.leads.tlst,
@@ -182,7 +182,9 @@ def run_cpp_solver(TLeads):
         probabilities        = pauli.get_probabilities(solver, NStates)
         currents             = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
         Tba                  = pauli.get_coupling(solver, NLeads, NStates)
-        pauli_factors        = pauli.get_pauli_factors(solver, NStates)
+        pauli_factors        = pauli.get_pauli_factors(solver, NLeads, NStates)
+
+        
         pauli.cleanup(solver)
         
         res = {
