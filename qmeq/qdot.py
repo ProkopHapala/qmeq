@@ -188,7 +188,7 @@ def construct_Ea_manybody(valslst, si):
     Ea : ndarray
         nmany by 1 array containing eigenvalues of the Hamiltonian.
     """
-    verb_print_(0,f"qdot.py: construct_Ea_manybody() valslst: {valslst}")
+    verb_print_(1,f"qdot.py: construct_Ea_manybody() valslst: {valslst}")
     Ea = np.zeros(si.nmany, dtype=float)
     if si.indexing == 'sz':
         # Iterate over charges
@@ -220,7 +220,7 @@ def construct_Ea_manybody(valslst, si):
             for ind in range(len(si.chargelst[charge])):
                 # The mapping of many-body states is according to chargelst
                 Ea[si.chargelst[charge][ind]] = valslst[charge][ind]
-    verb_print_(0,f"qdot.py: construct_Ea_manybody() Ea: {Ea}")
+    verb_print_(1,f"qdot.py: construct_Ea_manybody() Ea: {Ea}")
     return Ea
 
 
@@ -931,9 +931,9 @@ class QuantumDot(object):
 
     def diagonalise(self):
         """Diagonalises Hamiltonians for all charge states."""
-        verb_print_(0,"\n #### QuantumDot.diagonalise() - Starting diagonalization")
-        verb_print_(0,"QuantumDot.diagonalise() Single-particle Hamiltonian (hsingle):", self.hsingle)
-        verb_print_(0,"QuantumDot.diagonalise() Coulomb interaction (coulomb):", self.coulomb)
+        verb_print_(1,"\n#### QuantumDot.diagonalise() - Starting diagonalization")
+        verb_print_(1,"QuantumDot.diagonalise() Single-particle Hamiltonian (hsingle):", self.hsingle)
+        verb_print_(1,"QuantumDot.diagonalise() Coulomb interaction (coulomb):", self.coulomb)
         
         if self.si.indexing == 'sz':
             for charge in range(self.si.ncharge):
@@ -959,7 +959,7 @@ class QuantumDot(object):
                 verb_print_(3,f"QuantumDot.diagonalise() Eigenvalues: {vals}")
                 verb_print_(3,f"QuantumDot.diagonalise() Eigenvectors:\n{vecs}")
         self.set_Ea()
-        verb_print_(0,"\nQuantumDot.diagonalise() Final state energies (Ea):", self.Ea)
+        verb_print_(1,"\nQuantumDot.diagonalise() Final state energies (Ea):", self.Ea)
 
     def set_Ea(self):
         """Sets the many-body eigenstates using construct_Ea_manybody()."""

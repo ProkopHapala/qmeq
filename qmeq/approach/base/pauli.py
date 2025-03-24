@@ -46,9 +46,6 @@ class ApproachPauli(Approach):
         """
         Make factors used for generating Pauli master equation kernel.
         """
-        print("ApproachPauli.generate_fct(self):")
-        #exit()
-
         if self.verbosity > 3:
             print("\nQmeQ ApproachPauli::generate_fct() in ", __file__, " verbosity = ", self.verbosity, " inputs: \n")
             print(f"State energies (E):", self.qd.Ea)
@@ -93,16 +90,12 @@ class ApproachPauli(Approach):
         ----------
         kern : array
             (Modifies) Kernel matrix for Pauli master equation.
-        """
-        print("ApproachPauli.generate_kern()")
-        if self.verbosity > 3:
-            print("ApproachPauli.generate_kern() Building kernel matrix...")
-            
-        verb_print_(0,"ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(self.si.ncharge, self.si.statesdm))
+        """         
+        verb_print_(1,"ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(self.si.ncharge, self.si.statesdm))
         si, kh = self.si, self.kernel_handler
         ncharge, statesdm = si.ncharge, si.statesdm
 
-        verb_print_(0,"ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(ncharge, statesdm))
+        verb_print_(1,"ApproachPauli.generate_kern() ncharge: {}  statesdm: {}".format(ncharge, statesdm))
 
         self.generate_fct()
         #if self.verbosity > 3:print("DEBUG: ApproachPauli.generate_kern() after generate_fct() kh.kern:\n", kh.kern)
@@ -129,7 +122,7 @@ class ApproachPauli(Approach):
             np.set_printoptions(precision=15)
             print(kh.kern)
             np.set_printoptions(precision=5)  # Reset to default
-        print("===== ApproachPauli.generate_kern() DONE ====="  )
+        verb_print_(1,"===== ApproachPauli.generate_kern() DONE ====="  )
         #raise ValueError("DEBUG TERMINATION")
 
     def generate_coupling_terms(self, b, bp, bcharge):

@@ -1,12 +1,34 @@
 #!/usr/bin/env python3
 
+# Set up ASan preloading before any imports
+import os
+bASAN = True
+if bASAN:
+    # Get ASan library path
+    asan_lib = os.popen('gcc -print-file-name=libasan.so').read().strip()
+    print("Preloading ASan library: ", asan_lib)
+    # Set LD_PRELOAD environment variable
+    os.environ['LD_PRELOAD'] = asan_lib
+    os.environ['ASAN_OPTIONS'] = 'detect_leaks=0'
+
+import sys
+sys.stdout = sys.stderr = open(sys.stdout.fileno(), mode='w', buffering=1)
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sys import path
-path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
+#path.insert(0, '/home/prokop/bin/home/prokop/venvs/ML/lib/python3.12/site-packages/qmeq/')
 
 import qmeq
-from pauli_solver_lib import PauliSolver, calculate_state_energy, calculate_tunneling_amplitudes
+from qmeq import config
+from qmeq import indexing as qmqsi
+from qmeq.config import verb_print_
+
+import pauli_solver_lib as psl
+from pauli_solver_lib import PauliSolver
+
+# setup numpy print options to infinite line length
+np.set_printoptions(linewidth=256, suppress=True)
 
 # Constants
 NSingle = 3  # number of impurity states
@@ -33,154 +55,164 @@ VT = np.sqrt(GammaT/np.pi)  # tip
 coeffE = 0.4
 coeffT = 0.3
 
-# Lead couplings
-TLeads = {(0,0): VS, (0,1): VS, (0,2): VS,
-          (1,0): VT, (1,1): coeffT*VT, (1,2): coeffT*VT}
-
-def initialize_qmeq_solver():
-    """Initialize QmeQ solver once"""
-    print('\n### Initializing QmeQ Pauli solver')
+def build_hamiltonian(eps1, eps2, eps3, t, W):
+    verb_print_(1,"\n#### Building Hamiltonian: eps: ", [eps1, eps2, eps3], " t: ", t, " W: ", W)
+    # One-particle Hamiltonian
+    hsingle = {(0,0): eps1, (0,1): t, (0,2): t,
+               (1,1): eps2, (1,2): t,
+               (2,2): eps3}
     
-    hsingle = {(0,0): 0.0, (0,1): t, (0,2): t,
-               (1,1): 0.0, (1,2): t,
-               (2,2): 0.0}
-    coulomb = {(0,1,1,0): W, (1,2,2,1): W, (0,2,2,0): W}
-    mu_L = {0: muS, 1: muT + VBias}
+    # Two-particle Hamiltonian: inter-site coupling
+    coulomb = {(0,1,1,0): W,
+               (1,2,2,1): W,
+               (0,2,2,0): W}
+    
+    return hsingle, coulomb
+
+def build_leads(muS, muT, Temp, VS, VT, coeffT, VBias):
+    # Leads: substrate (S) and scanning tip (T)
+    mu_L   = {0: muS, 1: muT + VBias}
     Temp_L = {0: Temp, 1: Temp}
-
-    qmeq_system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand,
-                             kerntype='Pauli', indexing='Lin', itype=0, symq=True, solmethod='solve', mfreeq=0)
+    # Coupling between leads (1st number) and impurities (2nd number)
+    TLeads = {(0,0): VS,         # S <-- 1
+              (0,1): VS,         # S <-- 2
+              (0,2): VS,         # S <-- 3
+              (1,0): VT,         # T <-- 1
+              (1,1): coeffT*VT,  # T <-- 2
+              (1,2): coeffT*VT}  # T <-- 3
     
-    # Set verbosity after creation
-    qmeq_system.appr.verbosity = verbosity
-    qmeq_system.verbosity = verbosity
-    
-    print(f'QmeQ solver initialized with verbosity: {verbosity}')
-    print(f'QmeQ system params: NSingle={NSingle}, NLeads={NLeads}, DBand={DBand}')
-    return qmeq_system
+    return mu_L, Temp_L, TLeads
 
-def initialize_cpp_solver():
-    """Initialize C++ solver once"""
-    pauli = PauliSolver(verbosity=verbosity)
+def run_QmeQ_solver(eps1, eps2, eps3):
+    """Run QmeQ solver with the given parameters"""
+    verb_print_(1,  '\n### Running QmeQ Pauli solver')
+    
+    mu_L, Temp_L, TLeads = build_leads(muS, muT, Temp, VS, VT, coeffT, VBias)
+    Hsingle, Hcoulomb    = build_hamiltonian(eps1, eps2, eps3, t, W)
+    
+    try:
+        config.verbosity = verbosity
+        system = qmeq.Builder(NSingle, Hsingle, Hcoulomb, NLeads, TLeads, mu_L, Temp_L, DBand,  kerntype='Pauli', indexing='Lin', itype=0, symq=True, solmethod='solve', mfreeq=0)
+        system.appr.verbosity = verbosity  # Set verbosity after instance creation
+        system.verbosity = verbosity
+        system.solve()
+    except Exception as e:
+        print(f"Error running QmeQ solver: {e}")
+        return None
+    
+    if verbosity > 0:
+        print("QmeQ energies:", system.Ea)
+        print("QmeQ probabilities:", system.phi0)
+        print("QmeQ current:", system.current[1])
+    
+    return system.current[1]
+
+# def initialize_qmeq_solver():
+#     """Initialize QmeQ solver once"""
+#     verb_print_(1,  '\n### Initializing QmeQ Pauli solver')
+    
+#     hsingle = {(0,0): 0.0, (0,1): t, (0,2): t,
+#                (1,1): 0.0, (1,2): t,
+#                (2,2): 0.0}
+#     coulomb = {(0,1,1,0): W, (1,2,2,1): W, (0,2,2,0): W}
+#     mu_L = {0: muS, 1: muT + VBias}
+#     Temp_L = {0: Temp, 1: Temp}
+
+#     qmeq_system = qmeq.Builder(NSingle, hsingle, coulomb, NLeads, TLeads, mu_L, Temp_L, DBand, kerntype='Pauli', indexing='Lin', itype=0, symq=True, solmethod='solve', mfreeq=0)
+    
+#     # Set verbosity after creation
+#     qmeq_system.appr.verbosity = verbosity
+#     qmeq_system.verbosity = verbosity
+    
+#     print(f'QmeQ solver initialized with verbosity: {verbosity}')
+#     print(f'QmeQ system params: NSingle={NSingle}, NLeads={NLeads}, DBand={DBand}')
+#     return qmeq_system
+
+def run_cpp_solver(pauli,eps1, eps2, eps3):
+    """Run C++ solver with the given parameters"""
+    verb_print_(1,  '\n### Running C++ Pauli solver')
+    
     NStates = 2**NSingle
     
-    # Create constant parts of the solver
-    tunneling_amplitudes = calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads)
+    mu_L, Temp_L, TLeads = build_leads(muS, muT, Temp, VS, VT, coeffT, VBias)
+    Hsingle, Hcoulomb    = build_hamiltonian(eps1, eps2, eps3, t, W)
+    
     lead_mu = np.array([muS, muT + VBias])
     lead_temp = np.array([Temp, Temp])
     lead_gamma = np.array([GammaS, GammaT])
     
-    # Create solver instance with dummy energies
-    solver = pauli.create_solver(NStates, NLeads, np.zeros(NStates), tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity)
+    # Convert TLeads dictionary to matrix form
+    TLeads_ = np.zeros((NLeads, NSingle))
+    for k, v in TLeads.items():
+        TLeads_[k[0], k[1]] = v
     
-    return pauli, solver, NStates
-
-def calculate_energies(eps1, eps2, eps3, NSingle, W, VBias, coeffE, t):
-    """Calculate many-body state energies for QmeQ solver"""
-    return np.array([calculate_state_energy(i, NSingle, eps1, eps2, eps3, W, VBias=VBias, coeffE=coeffE, t=t) for i in range(2**NSingle)])
-
-def run_qmeq_solver(eps1, eps2, eps3, qmeq_system):
-    """Run QmeQ solver with updated Hamiltonian"""
-    print(f'\nRunning QmeQ solver for eps=({eps1:.2f}, {eps2:.2f}, {eps3:.2f})')
-    
-    # Calculate new energies
-    energies = calculate_energies(eps1, eps2, eps3, NSingle, W, VBias, coeffE, t)
-    
-    # Update Hamiltonian
-    qmeq_system.Ea = energies
+    # Convert Hsingle dictionary to matrix form
+    Hsingle_ = np.zeros((NSingle, NSingle))
+    for k, v in Hsingle.items():
+        Hsingle_[k[0], k[1]] = v
     
     if verbosity > 0:
-        np.set_printoptions(linewidth=np.inf, suppress=True)
-        print('Energies QmeQ:', np.array2string(qmeq_system.Ea, separator=', ', prefix='Energies QmeQ: '))
+        print("\nHsingle:"); print(Hsingle_)
+        print("\nTLeads:"); print(TLeads_)
     
-    qmeq_system.solve()
+    # State ordering
+    state_order = [0, 4, 2, 6, 1, 5, 3, 7]
+    state_order = np.array(state_order, dtype=np.int32)
     
+    # Create and run solver
+    solver = pauli.create_pauli_solver_new(NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, state_order, verbosity)
+    
+    # Get energies before solving
+    energies = pauli.get_energies(solver, NStates)
     if verbosity > 0:
-        print('Probabilities QmeQ:', np.array2string(qmeq_system.phi0, separator=', ', prefix='Probabilities QmeQ: '))
-        print('Kernel QmeQ:')
-        print(np.array2string(qmeq_system.kern, separator=', ', prefix='Kernel QmeQ: '))
+        print("C++ energies:", energies)
     
-    print('QmeQ current:', qmeq_system.current[1])
-    return qmeq_system.current[1]
-
-def run_cpp_solver(eps1, eps2, eps3, pauli, solver, NStates):
-    """Run C++ solver with updated energies"""
-    print(f'\nRunning C++ solver for eps=({eps1:.2f}, {eps2:.2f}, {eps3:.2f})')
-    
-    # Calculate new energies
-    energies = calculate_energies(eps1, eps2, eps3, NSingle, W, VBias, coeffE, t)
-    
-    if verbosity > 0:
-        np.set_printoptions(linewidth=np.inf, suppress=True)
-        print('Energies C++:', np.array2string(energies, separator=', ', prefix='Energies C++: '))
-    
-    tunneling_amplitudes = calculate_tunneling_amplitudes(NLeads, NStates, NSingle, TLeads)
-    lead_mu = np.array([muS, muT + VBias])
-    lead_temp = np.array([Temp, Temp])
-    lead_gamma = np.array([GammaS, GammaT])
-    
-    solver = pauli.create_solver(NStates, NLeads, energies, tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity)
     pauli.solve(solver)
     
     if verbosity > 0:
         kernel = pauli.get_kernel(solver, NStates)
         probabilities = pauli.get_probabilities(solver, NStates)
-        print('Probabilities C++:', np.array2string(probabilities, separator=', ', prefix='Probabilities C++: '))
-        print('Kernel C++:')
-        print(np.array2string(kernel, separator=', ', prefix='Kernel C++: '))
+        print("C++ probabilities:", probabilities)
+        print("C++ kernel:\n", kernel)
     
     current = pauli.calculate_current(solver, 1)
+    if verbosity > 0:
+        print("C++ current:", current)
+    
     pauli.cleanup(solver)
-    print('C++ current:', current)
     return current
-
-def scan_QmeQ(eps, bPrint=False):
-    if bPrint:
-        print("\n####################################################################")
-        print("scan_QmeQ")
-        print("######################################################################")
-    qmeq_system = initialize_qmeq_solver()
-    res = []
-    for eps1, eps2, eps3 in eps:
-        qmeq_current = run_qmeq_solver(eps1, eps2, eps3, qmeq_system)
-        res.append(qmeq_current)
-        if bPrint:
-            print(f"{eps1:.2f} {eps2:.2f} {eps3:.2f} -> {qmeq_current:.2f}")
-    return res
-
-def scan_cpp(eps, bPrint=False):
-    if bPrint:
-        print("\n####################################################################")
-        print("scan_cpp")
-        print("######################################################################")
-    pauli, cpp_solver, NStates = initialize_cpp_solver()
-    res = []
-    for eps1, eps2, eps3 in eps:
-        cpp_current = run_cpp_solver(eps1, eps2, eps3, pauli, cpp_solver, NStates)
-        res.append(cpp_current)
-        if bPrint:
-            print(f"{eps1:.2f} {eps2:.2f} {eps3:.2f} -> {cpp_current:.2f}")
-    return res
     
 if __name__ == "__main__":
     # Define energy range
     bPrint = True
-    nstep = 3
-    eps = np.zeros( (nstep,3) )
+    nstep = 1
+    eps = np.zeros((nstep,3))
     ts = np.linspace(0, 1, nstep)
-    eps[:,0] = 0.1+ts
-    eps[:,1] = 0.2+ts*2.
-    eps[:,2] = 0.3+ts*.3
+    eps[:,0] = -10.0 + ts
+    eps[:,1] = -10.01 + ts*2.0
+    eps[:,2] = -10.02 + ts*0.3
 
-    verbosity = 1
+    verbosity = 0
     
     # Run scan
-    qmeq_results = scan_QmeQ(eps, bPrint)
-    cpp_results  = scan_cpp(eps, bPrint)
+    #qmeq_results = scan_QmeQ(eps, bPrint)
+    #cpp_results  = scan_cpp(eps, bPrint)
+
+    pauli = PauliSolver(verbosity=verbosity, bASAN=bASAN)
+
+    qmeq_results = np.zeros(nstep)
+    cpp_results = np.zeros(nstep)
+    for i in range(nstep):
+        epsi = eps[i]
+        print(f"####### run python QmeQ Pauli {epsi}")
+        qmeq_results[i] = run_QmeQ_solver(epsi[0], epsi[1], epsi[2])
+        print(f"####### run C++ Pauli {epsi}")
+        cpp_results[i] = run_cpp_solver(pauli, epsi[0], epsi[1], epsi[2])
+        print(f"eps: {epsi} -> QmeQ: {qmeq_results[i]} C++: {cpp_results[i]}")
             
     plt.figure(figsize=(10, 6))
-    plt.plot(ts, qmeq_results, 'b-', label='QmeQ Pauli')
-    plt.plot(ts, cpp_results, 'r--', label='C++ Pauli')
+    plt.plot(ts, qmeq_results, 'o-b', label='QmeQ Pauli')
+    plt.plot(ts, cpp_results,  'o:r', label='C++ Pauli')
     plt.xlabel('Onsite Energy (meV)')
     plt.ylabel('Current (nA)')
     plt.title('Solver Comparison for 1D Energy Scan')

@@ -184,7 +184,7 @@ def run_cpp_solver(TLeads):
         Tba                  = pauli.get_coupling(solver, NLeads, NStates)
         pauli_factors        = pauli.get_pauli_factors(solver, NLeads, NStates)
 
-        
+
         pauli.cleanup(solver)
         
         res = {
@@ -324,7 +324,7 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True):  # Compare re
 if __name__ == "__main__":
 
     mu_L, Temp_L, TLeads = build_leads(muS, muT, Temp, VS, VT, coeffT, VBias)
-    Hsingle,  Hcoulomb = build_hamiltonian(eps1, eps2, eps3, t, W)
+    Hsingle,  Hcoulomb   = build_hamiltonian(eps1, eps2, eps3, t, W)
     print( "hsingle:\n", Hsingle)
     print( "coulomb:\n", Hcoulomb)
 

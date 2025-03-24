@@ -139,7 +139,7 @@ class Approach(object):
         return self.si.ndm0r
 
     def prepare_kern(self):
-        verb_print_(0,"Approach.prepare_kern()")
+        verb_print_(1,"Approach.prepare_kern()")
         if self.is_prepared and not self.si.states_changed:
             self.clean_arrays()
             return
@@ -196,7 +196,7 @@ class Approach(object):
             self.kernel_handler = KernelHandler(self.si)
 
     def prepare_solver(self):
-        verb_print_(0,"Approach.prepare_solver()")
+        verb_print_(1,"Approach.prepare_solver()")
         solmethod = self.funcp.solmethod
         # Determine the proper solution method
         if self.funcp.mfreeq:
@@ -312,7 +312,7 @@ class Approach(object):
     def solve_kern(self):
         """Finds the stationary state using least squares or using LU decomposition."""
 
-        verb_print_(0, f"Approach.solve_kern() solmethod: {self.funcp.solmethod}")
+        verb_print_(1, f"Approach.solve_kern() solmethod: {self.funcp.solmethod}")
 
         solmethod = self.funcp.solmethod
         symq = self.funcp.symq
@@ -333,7 +333,7 @@ class Approach(object):
 
         #verb_print( "DEBUG: -- Approach.solve_kern() kern:\n", kern)
         #verb_print( "DEBUG: -- Approach.solve_kern() bvec:\n", bvec)
-        if self.verbosity > 0:  
+        if self.verbosity > 0:
             print("Approach.solve_kern() kern:\n", kern)
             print("Approach.solve_kern() bvec:\n", bvec)
             # Print with higher precision for comparison with C++
@@ -411,22 +411,22 @@ class Approach(object):
         currentq : bool
             Calculate the current.
         """
-        verb_print_(0, "apr: Approach.solve()")
-        verb_print_(0, " solve() type(self).__name__ ",  type(self).__name__)
+        verb_print_(2, "apr: Approach.solve()")
+        verb_print_(2, " solve() type(self).__name__ ",  type(self).__name__)
         #print(f" solve() self.__file__: {self.__file__}") 
 
         if qdq:
-            verb_print_(0, "Approach.solve() qdq")
+            verb_print_(2, "Approach.solve() qdq")
             self.qd.diagonalise()
             if rotateq:
                 self.rotate()
         #
         if masterq:
-            verb_print_(0, "Approach.solve() masterq")
+            verb_print_(2, "Approach.solve() masterq")
             self.prepare_kern()
-            verb_print_(0, "Approach.solve() after prepare_kern()")
+            verb_print_(2, "Approach.solve() after prepare_kern()")
             self.generate_fct()
-            verb_print_(0, "Approach.solve() after generate_fct()")    
+            verb_print_(2, "Approach.solve() after generate_fct()")    
 
             if not self.funcp.mfreeq:
                 self.generate_kern()

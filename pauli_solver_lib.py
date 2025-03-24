@@ -146,7 +146,7 @@ class PauliSolver:
         # print("lead_gamma = ", lead_gamma)
         # print("state_order = ", state_order)
 
-        print("create_pauli_solver_new()")
+        #print("create_pauli_solver_new()")
         solver = self.lib.create_pauli_solver_new(
             nSingle, nstates, nleads,
             _np_as(Hsingle, c_double_p), W, _np_as(TLeads, c_double_p),
