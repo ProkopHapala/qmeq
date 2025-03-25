@@ -156,7 +156,8 @@ def run_cpp_solver(TLeads):
         lead_mu              = np.array([muS, muT + VBias])
         lead_temp            = np.array([Temp, Temp])
         lead_gamma           = np.array([GammaS, GammaT])
-        pauli                = PauliSolver(verbosity=verbosity, bASAN=bASAN)
+        #pauli                = PauliSolver(verbosity=verbosity, bASAN=bASAN)
+
 
         # Convert dictionary-based TLeads and Hsingle to numpy arrays
         TLeads_            = np.zeros((NLeads, NSingle))
@@ -173,6 +174,43 @@ def run_cpp_solver(TLeads):
         state_order = [0, 4, 2, 6, 1, 5, 3, 7]
         state_order = np.array(state_order, dtype=np.int32)
 
+
+
+        pauli                = PauliSolver(NSingle, NLeads, verbosity=verbosity )
+
+        print(" 2. Set lead parameters")
+        pauli.set_leads(lead_mu, lead_temp, lead_gamma)
+        
+        print(" 3. Set tunneling amplitudes (lead coupling)")
+        pauli.set_tunneling(TLeads_)
+        
+        print(" 4. Set single-particle Hamiltonian")
+        pauli.set_hsingle(Hsingle_)
+        
+        print(" 5. Generate Pauli factors")
+        pauli.generate_pauli_factors(W, state_order )
+        
+        print(" 6. Generate kernel matrix")
+        pauli.generate_kernel()
+        
+        print(" 7. Solve the system")
+        pauli.solve()
+        
+
+        #I1 = pauli.solve_hsingle(solver, Hsingle_, W, 0, state_order)
+        #print( f"Current I1: {I1:.16g}" )
+
+        
+        print(" 8. Calculate properties")
+        energies             = pauli.get_energies(NStates)
+        kernel               = pauli.get_kernel(NStates)
+        probabilities        = pauli.get_probabilities(NStates)
+        currents             = [pauli.calculate_current(lead) for lead in range(NLeads)]
+        Tba                  = pauli.get_coupling(NLeads, NStates)
+        pauli_factors        = pauli.get_pauli_factors(NLeads, NStates)
+
+
+        '''
         # ----- Using the new optimized workflow -----
         print(" 1. Create basic solver with memory allocation")
         solver = pauli.create_solver(NSingle, NLeads)
@@ -207,9 +245,12 @@ def run_cpp_solver(TLeads):
         currents             = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
         Tba                  = pauli.get_coupling(solver, NLeads, NStates)
         pauli_factors        = pauli.get_pauli_factors(solver, NLeads, NStates)
+        '''
 
         # Cleanup when done
-        pauli.cleanup(solver)
+        #pauli.cleanup(solver)
+
+        pauli.cleanup()
         
         res = {
             'current':       currents[1],
