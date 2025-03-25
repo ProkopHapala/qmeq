@@ -12,6 +12,6 @@ rm -f ../cpp/pauli_solver_wrapper.o
 rm -f ../cpp/pauli_solver_wrapper.so
 
 # Run the Python script with proper ASan preloading
-#python3 compare_solvers.py | tee compare_solvers.log
-python3 compare_scan_1D.py | tee compare_scan_1D.log
+python3 compare_solvers.py | tee compare_solvers.log
+#python3 compare_scan_1D.py | tee compare_scan_1D.log
 #python3 compare_scan_2D.py | tee compare_scan_2D.log

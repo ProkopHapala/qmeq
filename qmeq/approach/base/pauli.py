@@ -57,6 +57,7 @@ class ApproachPauli(Approach):
             print(f"Band parameters (dlst):", self.leads.dlst)
             print(f"Number of charge states:", self.si.ncharge)
             print(f"States by charge (statesdm):", self.si.statesdm)
+            print(f"State energies (E):", self.qd.Ea)
         
         #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
             
@@ -66,7 +67,7 @@ class ApproachPauli(Approach):
 
         itype = self.funcp.itype
         paulifct = self.paulifct
-        #verb_print_(3,"ApproachPauli.generate_fct(): paulifct.shape = ", paulifct.shape)
+        verb_print_(3,"ApproachPauli.generate_fct(): paulifct.shape = ", paulifct.shape)
         for charge in range(ncharge-1):
             ccharge = charge+1
             bcharge = charge
@@ -78,7 +79,7 @@ class ApproachPauli(Approach):
                     rez = func_pauli(Ecb, mulst[l], tlst[l], dlst[l, 0], dlst[l, 1], itype)
                     paulifct[l, cb, 0] = xcb*rez[0]  # Forward
                     paulifct[l, cb, 1] = xcb*rez[1]  # Backward
-                    #verb_print_(3,f"ApproachPauli.generate_fct() l: {l} i: {c} j: {b} cb: {cb} E_diff: {Ecb:.6f} coupling: {xcb:.6f} fermi: {rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
+                    verb_print_(3,f"ApproachPauli.generate_fct() l: {l} i: {c} j: {b} cb: {cb} E_diff: {Ecb:.6f} coupling: {xcb:.6f} fermi: {rez[0]/(2*np.pi):.6f} factors:[{paulifct[l,cb,0]:.6f}, {paulifct[l,cb,1]:.6f}]")
 
         #raise NotImplementedError("DEBUG: we exit here to make the debugging easier")
 
@@ -102,7 +103,7 @@ class ApproachPauli(Approach):
         #exit(0)
         if self.verbosity > 1:  
             #print("ApproachPauli.generate_kern().1 after generate_fct() kh.kern:\n", kh.kern)
-            print("ApproachPauli.generate_kern()paulifct  : \n", self.paulifct )
+            print("ApproachPauli.generate_kern() paulifct  : \n", self.paulifct )
             print("lenlst    : ", self.si.lenlst )
             print("dictdm    : ", self.si.dictdm )
             print("shiftlst0 : ", self.si.shiftlst0)

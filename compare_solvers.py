@@ -64,7 +64,7 @@ coeffE = 0.4
 coeffT = 0.3
 
 
-verbosity = 2
+verbosity = 3
 
 # ==== Functions
 
@@ -149,42 +149,61 @@ def run_cpp_solver(TLeads):
         print( "\n\n" )
         print( "######################################################################" )
         print( "######################################################################" )
-        print( "\n### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp \n" )
+        print( "\n### Running C++ solver with new optimized scheme \n" )
         
         NStates = 2**NSingle
         
         lead_mu              = np.array([muS, muT + VBias])
         lead_temp            = np.array([Temp, Temp])
         lead_gamma           = np.array([GammaS, GammaT])
-        pauli                = PauliSolver( verbosity=verbosity, bASAN=bASAN )
+        pauli                = PauliSolver(verbosity=verbosity, bASAN=bASAN)
 
-        TLeads_            = np.zeros( (NLeads, NSingle) )
+        # Convert dictionary-based TLeads and Hsingle to numpy arrays
+        TLeads_            = np.zeros((NLeads, NSingle))
         for k,v in TLeads.items():
             TLeads_[k[0], k[1]] = v
-        Hsingle_ = np.zeros( (NSingle, NSingle) )
+        Hsingle_ = np.zeros((NSingle, NSingle))
         for k,v in Hsingle.items():
             Hsingle_[k[0], k[1]] = v
 
         print("\nHsingle:");        print(Hsingle_)
         print("\nTLeads:");         print(TLeads_)
 
-        #state_order = [0, 1, 2, 4, 3, 5, 6, 7]
+        # Setup state ordering
         state_order = [0, 4, 2, 6, 1, 5, 3, 7]
-        #state_order = [0, 4, 2, 1, 6, 5, 3, 7]
         state_order = np.array(state_order, dtype=np.int32)
 
-        solver               = pauli.create_pauli_solver_new( NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, state_order, verbosity)
-
-        energies = pauli.get_energies(solver, NStates)
-
+        # ----- Using the new optimized workflow -----
+        print(" 1. Create basic solver with memory allocation")
+        solver = pauli.create_solver(NSingle, NLeads)
+        
+        print(" 2. Set lead parameters")
+        pauli.set_leads(solver, lead_mu, lead_temp, lead_gamma)
+        
+        print(" 3. Set tunneling amplitudes (lead coupling)")
+        pauli.set_tunneling(solver, TLeads_)
+        
+        print(" 4. Set single-particle Hamiltonian")
+        pauli.set_hsingle(solver, Hsingle_)
+        
+        print(" 5. Generate Pauli factors")
+        pauli.generate_pauli_factors(solver, W, state_order )
+        
+        print(" 6. Generate kernel matrix")
+        pauli.generate_kernel(solver)
+        
+        print(" 7. Solve the system")
         pauli.solve(solver)
+        
+        print(" 8. Calculate properties")
+        energies             = pauli.get_energies(solver, NStates)
         kernel               = pauli.get_kernel(solver, NStates)
         probabilities        = pauli.get_probabilities(solver, NStates)
         currents             = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
         Tba                  = pauli.get_coupling(solver, NLeads, NStates)
         pauli_factors        = pauli.get_pauli_factors(solver, NLeads, NStates)
 
-
+        # Cleanup when done
         pauli.cleanup(solver)
         
         res = {
@@ -192,7 +211,7 @@ def run_cpp_solver(TLeads):
             'energies':      energies,
             'probabilities': probabilities,
             'kernel':        kernel,
-            'pauli_factors':pauli_factors,
+            'pauli_factors': pauli_factors,
             'leads': {
                 'mu':    lead_mu,
                 'temp':  lead_temp,
@@ -201,8 +220,6 @@ def run_cpp_solver(TLeads):
             }
         }
 
-        #print("\nQmeQ hsingle:", Hsingle)
-        #print("QmeQ coulomb:", Hcoulomb)
         print("C++ energies:", energies)
         print("C++ probabilities:", probabilities)
         print("C++ kernel:\n", kernel)
@@ -331,4 +348,4 @@ if __name__ == "__main__":
     
     qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
     cpp_res  = run_cpp_solver(TLeads)
-    compare_results(qmeq_res, cpp_res)
+    #compare_results(qmeq_res, cpp_res)

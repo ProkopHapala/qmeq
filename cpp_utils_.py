@@ -20,9 +20,9 @@ BUILD_PATH   = os.path.normpath( PACKAGE_PATH + '../../../cpp/Build/libs/CombatM
 
 # Type aliases for convenience
 c_double_p = ctypes.POINTER(ctypes.c_double)
-c_float_p = ctypes.POINTER(ctypes.c_float)
-c_int_p = ctypes.POINTER(ctypes.c_int)
-c_bool_p = ctypes.POINTER(ctypes.c_bool)
+c_float_p  = ctypes.POINTER(ctypes.c_float)
+c_int_p    = ctypes.POINTER(ctypes.c_int)
+c_bool_p   = ctypes.POINTER(ctypes.c_bool)
 
 def _np_as(arr,atype):
     """Convert numpy array to C pointer type"""

@@ -3,7 +3,9 @@
 import numpy as np
 import os
 import ctypes
-from cpp_utils_ import compile_lib, work_dir, _np_as, c_double_p, c_int_p
+from ctypes import  c_void_p, c_int, c_double
+from cpp_utils_ import compile_lib, work_dir, _np_as,   c_double_p, c_int_p
+
 
 class PauliSolver:
     """Python wrapper for C++ PauliSolver class"""
@@ -38,80 +40,83 @@ class PauliSolver:
         
     def _setup_function_signatures(self):
         """Set up C++ function signatures"""
-        self.lib.create_pauli_solver.argtypes = [
-            ctypes.c_int, ctypes.c_int,
-            c_double_p, c_double_p, c_double_p, c_double_p, c_double_p, ctypes.c_int
-        ]
-        self.lib.create_pauli_solver.restype  = ctypes.c_void_p
+        # Original solver creation (for backward compatibility)
+        self.lib.create_pauli_solver.argtypes = [ c_int, c_int, c_double_p, c_double_p, c_double_p, c_double_p, c_double_p, c_int ]
+        self.lib.create_pauli_solver.restype = c_void_p
+        
+        # New optimized workflow functions
+        self.lib.create_solver.argtypes = [c_int, c_int, c_int]
+        self.lib.create_solver.restype = c_void_p
         
         self.lib.create_pauli_solver_new.argtypes = [
-            ctypes.c_int, ctypes.c_int, ctypes.c_int,
-            c_double_p, ctypes.c_double, c_double_p,
-            c_double_p, c_double_p, c_double_p, c_int_p, ctypes.c_int
+            c_int, c_int, c_int,
+            c_double_p, c_double, c_double_p,
+            c_double_p, c_double_p, c_double_p, c_int_p, c_int
         ]
-        self.lib.create_pauli_solver_new.restype  = ctypes.c_void_p
+        self.lib.create_pauli_solver_new.restype  = c_void_p
+
+        # Step 2: Set lead parameters
+        self.lib.set_leads.argtypes = [c_void_p, c_double_p, c_double_p, c_double_p]
+        self.lib.set_leads.restype = None
         
-        self.lib.solve_pauli.argtypes = [ctypes.c_void_p]
+        # Step 3: Set tunneling amplitudes
+        self.lib.set_tunneling.argtypes = [c_void_p, c_double_p]
+        self.lib.set_tunneling.restype = None
+        
+        # Step 4: Set Hsingle (single-particle Hamiltonian)
+        self.lib.set_hsingle.argtypes = [c_void_p, c_double_p]
+        self.lib.set_hsingle.restype = None
+        
+        # Step 5: Generate Pauli factors
+        self.lib.generate_pauli_factors.argtypes = [ c_void_p, c_double, c_int_p]
+        self.lib.generate_pauli_factors.restype = None
+        
+        # Step 6: Generate kernel matrix
+        self.lib.generate_kernel.argtypes = [c_void_p]
+        self.lib.generate_kernel.restype = None
+        
+        self.lib.solve_pauli.argtypes = [c_void_p]
         self.lib.solve_pauli.restype  = None
         
-        self.lib.get_kernel.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_kernel.argtypes = [c_void_p, c_double_p]
         self.lib.get_kernel.restype  = None
         
-        self.lib.get_probabilities.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_probabilities.argtypes = [c_void_p, c_double_p]
         self.lib.get_probabilities.restype  = None
         
-        self.lib.get_energies.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_energies.argtypes = [c_void_p, c_double_p]
         self.lib.get_energies.restype  = None
         
-        self.lib.calculate_current.argtypes = [ctypes.c_void_p, ctypes.c_int]
-        self.lib.calculate_current.restype  = ctypes.c_double
+        self.lib.calculate_current.argtypes = [c_void_p, c_int]
+        self.lib.calculate_current.restype  = c_double
         
-        self.lib.delete_pauli_solver.argtypes = [ctypes.c_void_p]
+        self.lib.delete_pauli_solver.argtypes = [c_void_p]
         self.lib.delete_pauli_solver.restype  = None
         
-        self.lib.get_coupling.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_coupling.argtypes = [c_void_p, c_double_p]
         self.lib.get_coupling.restype  = None
 
-        self.lib.get_pauli_factors.argtypes = [ctypes.c_void_p, c_double_p]
+        self.lib.get_pauli_factors.argtypes = [c_void_p, c_double_p]
         self.lib.get_pauli_factors.restype  = None
         
         #print("PauliSolver::_setup_function_signatures() DONE")
     
-    def create_solver(self, nstates, nleads, energies, tunneling_amplitudes, lead_mu, lead_temp, lead_gamma, verbosity=0):
-        """Create a new PauliSolver instance
+    # Methods for optimized workflow
+    def create_solver(self, nSingle, nleads, verbosity=None):
+        """Create a basic Pauli solver instance without initializing parameters
         
         Args:
-            nstates (int): Number of states
+            nSingle (int): Number of single-particle states
             nleads (int): Number of leads
-            energies (np.ndarray): State energies
-            tunneling_amplitudes (np.ndarray): Tunneling amplitudes (nleads, nstates, nstates)
-            lead_mu (np.ndarray): Chemical potentials for each lead
-            lead_temp (np.ndarray): Temperatures for each lead
-            lead_gamma (np.ndarray): Coupling strengths for each lead
+            verbosity (int, optional): Verbosity level
             
         Returns:
             solver: Handle to C++ solver instance
         """
-        # Ensure arrays are C-contiguous and in the correct format
-        energies = np.ascontiguousarray(energies, dtype=np.float64)
-        tunneling_amplitudes = np.ascontiguousarray(tunneling_amplitudes.transpose(0, 2, 1), dtype=np.float64)
-        lead_mu    = np.ascontiguousarray(lead_mu,    dtype=np.float64)
-        lead_temp  = np.ascontiguousarray(lead_temp,  dtype=np.float64)
-        lead_gamma = np.ascontiguousarray(lead_gamma, dtype=np.float64)
-        
-        #if self.verbosity > 0:
-        #    print("\nDEBUG: pauli_solver_lib.py tunneling amplitudes before C++ (after transpose):")
-        #    print(tunneling_amplitudes)
-        
-        # Create solver
-        solver = self.lib.create_pauli_solver(
-            nstates, nleads,
-            _np_as(energies, c_double_p), _np_as(tunneling_amplitudes, c_double_p),
-            _np_as(lead_mu, c_double_p), _np_as(lead_temp, c_double_p), _np_as(lead_gamma, c_double_p),
-            self.verbosity
-        )
-        return solver
-    
+        if verbosity is None:
+            verbosity = self.verbosity
+        return self.lib.create_solver(nSingle, nleads, verbosity)
+
     def create_pauli_solver_new(self,  nstates, nleads, Hsingle, W, TLeads, lead_mu, lead_temp, lead_gamma, state_order, verbosity=0):
         """Create a new PauliSolver instance
         
@@ -157,8 +162,65 @@ class PauliSolver:
         return solver
 
 
+    
+    def set_leads(self, solver, lead_mu, lead_temp, lead_gamma):
+        """Set lead parameters for the solver
+        
+        Args:
+            solver: Handle to C++ solver instance
+            lead_mu (np.ndarray): Chemical potentials for each lead
+            lead_temp (np.ndarray): Temperatures for each lead
+            lead_gamma (np.ndarray): Coupling strengths for each lead
+        """
+        lead_mu    = np.ascontiguousarray(lead_mu,    dtype=np.float64)
+        lead_temp  = np.ascontiguousarray(lead_temp,  dtype=np.float64)
+        lead_gamma = np.ascontiguousarray(lead_gamma, dtype=np.float64)
+        self.lib.set_leads(solver, _np_as(lead_mu, c_double_p), _np_as(lead_temp, c_double_p), _np_as(lead_gamma, c_double_p))
+    
+    def set_tunneling(self, solver, tunneling_amplitudes):
+        """Set tunneling amplitudes for the solver
+        
+        Args:
+            solver: Handle to C++ solver instance
+            tunneling_amplitudes (np.ndarray): Tunneling amplitudes (nleads, nstates, nstates)
+        """
+        print("set_tunneling(): tunneling_amplitudes shape", tunneling_amplitudes.shape,"\n ", tunneling_amplitudes )
+        #tunneling_amplitudes = np.ascontiguousarray(tunneling_amplitudes.transpose(0, 2, 1), dtype=np.float64)
+        tunneling_amplitudes = np.ascontiguousarray(tunneling_amplitudes, dtype=np.float64)
+        self.lib.set_tunneling(solver, _np_as(tunneling_amplitudes, c_double_p))
+    
+    def set_hsingle(self, solver, hsingle):
+        """Set single-particle Hamiltonian
+        
+        Args:
+            solver: Handle to C++ solver instance
+            hsingle (np.ndarray): Single-particle Hamiltonian
+        """
+        hsingle = np.ascontiguousarray(hsingle, dtype=np.float64)
+        self.lib.set_hsingle(solver, _np_as(hsingle, c_double_p))
+    
+    def generate_pauli_factors(self, solver, W=0.0, state_order=None):
+        """Generate Pauli factors for the solver
+        
+        Args:
+            solver: Handle to C++ solver instance
+        """
+        self.lib.generate_pauli_factors(solver, W, _np_as(state_order, c_int_p))
+    
+    def generate_kernel(self, solver):
+        """Generate kernel matrix for the solver
+        
+        Args:
+            solver: Handle to C++ solver instance
+        """
+        self.lib.generate_kernel(solver)
+    
     def solve(self, solver):
-        """Solve the master equation"""
+        """Solve the master equation
+        
+        Args:
+            solver: Handle to C++ solver instance
+        """
         self.lib.solve_pauli(solver)
     
     def get_energies(self, solver, nstates):

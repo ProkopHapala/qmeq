@@ -1085,7 +1085,7 @@ class StateIndexingDM(StateIndexing):
         #     -----
         #   c |   |
         #     -----
-        #verb_print_( 3,f"StateIndexingDM.get_ind_dm1() c: {c}  b: {b}  bcharge: {bcharge}  index: {self.lenlst[bcharge]*self.dictdm[c] + self.dictdm[b] + self.shiftlst1[bcharge]}")
+        verb_print_( 3,f"StateIndexingDM.get_ind_dm1() c: {c}  b: {b}  bcharge: {bcharge}  index: {self.lenlst[bcharge]*self.dictdm[c] + self.dictdm[b] + self.shiftlst1[bcharge]}")
         return self.lenlst[bcharge]*self.dictdm[c] + self.dictdm[b] + self.shiftlst1[bcharge]
 
     def remove_fock_states(self, lin_state_indices):

@@ -163,10 +163,10 @@ def construct_manybody_eigenstates(qd, hsingle, coulomb, statelst, ham_=None):
         ham_coulomb = construct_ham_coulomb(qd, coulomb, statelst)
         ham_hopping = construct_ham_hopping(qd, hsingle, statelst)
         ham = ham_coulomb + ham_hopping
-    verb_print_(3,f"construct_manybody_eigenstates() ham:\n{ham}")
+    verb_print_(4,f"construct_manybody_eigenstates() ham:\n{ham}")
     ham_vals, ham_vecs = np.linalg.eigh(ham)
     verb_print_(3,f"construct_manybody_eigenstates() ham_vals: {ham_vals}")
-    verb_print_(3,f"construct_manybody_eigenstates() ham_vecs:\n{ham_vecs}")
+    verb_print_(4,f"construct_manybody_eigenstates() ham_vecs:\n{ham_vecs}")
     return ham_vals, ham_vecs
 
 
@@ -941,23 +941,22 @@ class QuantumDot(object):
                     verb_print_(3,f"\nQuantumDot.diagonalise() Diagonalizing charge={charge}, sz={sz}")
                     vals, vecs = self.diagonalise_charge(charge, sz)
                     verb_print_(3,f"QuantumDot.diagonalise() Eigenvalues: {vals}")
-                    verb_print_(3,f"QuantumDot.diagonalise() Eigenvectors:\n{vecs}")
+                    verb_print_(4,f"QuantumDot.diagonalise() Eigenvectors:\n{vecs}")
         elif self.si.indexing == 'ssq':
             for charge in range(self.si.ncharge):
                 szlow = -(charge % 2)
                 szind = sz_to_ind(szlow, charge, self.si.nsingle)
                 verb_print_(3,f"\nQuantumDot.diagonalise() Diagonalizing charge={charge} with ssq symmetry")
                 self.valslst[charge], self.vecslst[charge] = (
-                    construct_manybody_eigenstates_ssq_all(self, charge, self.hsingle, self.coulomb,
-                                                       self.hamlst[charge][szind]))
+                    construct_manybody_eigenstates_ssq_all(self, charge, self.hsingle, self.coulomb, self.hamlst[charge][szind]))
                 verb_print_(3,f"QuantumDot.diagonalise() Eigenvalues: {self.valslst[charge]}")
-                verb_print_(3,f"QuantumDot.diagonalise() Eigenvectors:\n{self.vecslst[charge]}")
+                verb_print_(4,f"QuantumDot.diagonalise() Eigenvectors:\n{self.vecslst[charge]}")
         else:
             for charge in range(self.si.ncharge):
                 verb_print_(3,f"\nQuantumDot.diagonalise() Diagonalizing charge={charge}")
                 vals, vecs = self.diagonalise_charge(charge)
                 verb_print_(3,f"QuantumDot.diagonalise() Eigenvalues: {vals}")
-                verb_print_(3,f"QuantumDot.diagonalise() Eigenvectors:\n{vecs}")
+                verb_print_(4,f"QuantumDot.diagonalise() Eigenvectors:\n{vecs}")
         self.set_Ea()
         verb_print_(1,"\nQuantumDot.diagonalise() Final state energies (Ea):", self.Ea)
 

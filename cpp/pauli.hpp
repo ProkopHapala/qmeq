@@ -76,7 +76,7 @@ def construct_Ea_manybody(valslst, si):
     return Ea
 */
 double calculate_state_energy(int state, int nSingle, const double* Hsingle, double W) {
-    //printf("DEBUG calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
+    printf("DEBUG calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
     double energy = 0.0;
     // Single-particle energies
     for(int i = 0; i < nSingle; i++) {
@@ -151,75 +151,194 @@ inline static int state_to_charge(int state, int nSingle) {
 //     }
 // };
 
-// Parameters for the solver
-struct SolverParams {
-    int nSingle;  // Number of single-particle states
-    int nstates;  // Number of states
-    int nleads;   // Number of leads
-    double* energies=0;  // State energies [nstates]
-    LeadParams* leads=0; // Lead parameters [nleads]
-    double* coupling=0;  // Coupling matrix elements [nleads * nstates * nstates]
-    int* state_order=0;  // State order [nstates]
-    //int* state_order2=0; // State order [nstates]
-    
-    // Constructor
-    SolverParams() : nSingle(0), nstates(0), nleads(0) {}
+// ==================================================
+//                PauliSolver
+// ==================================================
 
-    // Reallocate memory
-    void reallocate(int nstates, int nleads) {
-        this->nstates = nstates;
-        this->nleads  = nleads;
-        _reallocate(energies, nstates);
-        _reallocate(leads,    nleads);
-        _reallocate(coupling, nleads * nstates * nstates);
-        _reallocate(state_order, nstates);
-    }
+class PauliSolver {
+public:
+    // Direct integration of SolverParams data
+    int nSingle = 0;              // Number of single-particle states
+    int nstates = 0;              // Number of states
+    int nleads = 0;               // Number of leads
+    double* energies = nullptr;   // State energies [nstates]
+    LeadParams* leads = nullptr;  // Lead parameters [nleads]
+    double* coupling = nullptr;   // Coupling matrix elements [nleads * nstates * nstates]
+    int* state_order     = nullptr; // State order [nstates]
+    int* state_order_inv = nullptr; // State order [nstates]
+    //int* state_order2    = nullptr; // State order [nstates]
     
-    // Copy constructor
-    SolverParams(const SolverParams& other) {
-        nSingle = other.nSingle;
-        nstates = other.nstates;
-        nleads  = other.nleads;
-        // Deep copy arrays
-        reallocate(nstates, nleads);
-        std::memcpy(energies, other.energies, nstates * sizeof(double));
-        std::memcpy(leads,    other.leads,    nleads * sizeof(LeadParams));
-        std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
-        std::memcpy(state_order, other.state_order, nstates * sizeof(int));
-    }
+    // Input parameters that can be modified in a loop
+    double* Hsingle = nullptr;    // Single-particle Hamiltonian [nSingle * nSingle]
+    double W        = 0.0;               // Coulomb interaction strength
+    double* TLeads  = nullptr;     // Lead tunneling amplitudes [nleads * nSingle]
     
-    // Destructor
-    ~SolverParams() {
-        if(energies) delete[] energies;
-        if(leads) delete[] leads;
-        if(coupling) delete[] coupling;
-        if(state_order) delete[] state_order;
-    }
+    // Working data
+    double* kernel = nullptr;                  // Kernel matrix [nstates * nstates]
+    double* rhs = nullptr;                     // Right-hand side vector [nstates]
+    double* probabilities = nullptr;           // State probabilities [nstates]
+    double* pauli_factors = nullptr;   // [nleads][ndm1][2]
+    int n_pauli_factors = 0;           // Number of Pauli factors in compact array
+    int ndm1 = 0;                              // Number of valid transitions (states differing by 1 charge)
+    int verbosity = 0;                         // Verbosity level for debugging
+    std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
+    // std::vector<int> state_order;              // Maps original index -> ordered index
+    // std::vector<int> state_order_inv;          // Maps ordered index -> original index
+    std::vector<int> state_order2;             // Maps original index -> ordered index
+
+    // from indexing.py of QmeQ
+    std::vector<int> lenlst;      // Number of states in each charge sector
+    std::vector<int> dictdm;      // State enumeration within charge sectors
+    std::vector<int> shiftlst0;   // Cumulative offsets
+    std::vector<int> shiftlst1;   // Cumulative offsets
+    std::vector<int> mapdm0;      // State pair mapping
     
-    // Assignment operator
-    SolverParams& operator=(const SolverParams& other) {
-        if (this != &other) {
-            nSingle = other.nSingle;
-            nstates = other.nstates;
-            nleads  = other.nleads;
-            reallocate(nstates, nleads);
-            std::memcpy(energies, other.energies, nstates * sizeof(double));
-            std::memcpy(leads,    other.leads, nleads * sizeof(LeadParams));
-            std::memcpy(coupling, other.coupling, nleads * nstates * nstates * sizeof(double));
-            std::memcpy(state_order, other.state_order, nstates * sizeof(int));
+    // Flags to track what needs to be recalculated
+    bool energies_updated = false;
+    bool coupling_updated = false;
+    bool kernel_updated = false;
+
+// Simple constructor that only allocates arrays but doesn't initialize values
+    PauliSolver(int nSingle_, int nstates_, int nleads_, int verb = 0) :  nSingle(nSingle_), nstates(nstates_), nleads(nleads_), verbosity(verb) {
+        
+        // Allocate memory for internal arrays
+        energies        = new double[nstates];
+        leads           = new LeadParams[nleads];
+        coupling        = new double[nleads * nstates * nstates];
+        state_order     = new int[nstates];
+        state_order_inv = new int[nstates];
+        //state_order2    = new int[nstates];
+        kernel          = new double[nstates * nstates];
+        rhs             = new double[nstates];
+        probabilities   = new double[nstates];
+        
+        // Allocate input parameter arrays
+        Hsingle         = new double[nSingle * nSingle];
+        TLeads          = new double[nleads * nSingle];
+        
+        // Initialize all arrays to zero
+        std::memset(energies, 0, nstates * sizeof(double));
+        std::memset(coupling, 0, nleads * nstates * nstates * sizeof(double));
+        std::memset(kernel,   0, nstates * nstates * sizeof(double));
+        std::memset(rhs,      0, nstates * sizeof(double));
+        std::memset(probabilities, 0, nstates * sizeof(double));
+        std::memset(Hsingle,       0, nSingle * nSingle * sizeof(double));
+        std::memset(TLeads,        0, nleads * nSingle * sizeof(double));
+        std::memset(state_order,   0, nstates * sizeof(int));
+        
+        // Don't initialize leads array here - will be set by setLeadParams
+        
+        if (verbosity > 0) {
+            printf("PauliSolver constructed with: nSingle=%d, nstates=%d, nleads=%d\n", 
+                   nSingle, nstates, nleads);
         }
-        return *this;
     }
     
-    // Disable move constructor and assignment
-    SolverParams(SolverParams&&) = delete;
-    SolverParams& operator=(SolverParams&&) = delete;
+    // Destructor to free allocated memory
+    ~PauliSolver() {
+        delete[] kernel;
+        delete[] rhs;
+        delete[] probabilities;
+        delete[] pauli_factors;
+        delete[] energies;
+        delete[] leads;
+        delete[] coupling;
+        delete[] state_order;
+        delete[] Hsingle;
+        delete[] TLeads;
+    }
+
+    // Setter methods for modifying parameters in a loop
+    
+    // Set the single-particle Hamiltonian matrix
+    void setHsingle(const double* newHsingle) {
+        if (Hsingle && newHsingle) {
+            std::memcpy(Hsingle, newHsingle, nSingle * nSingle * sizeof(double));
+            energies_updated = false;  // Energy values need to be recalculated
+            kernel_updated = false;    // Kernel matrix needs to be recalculated
+            if (verbosity > 1) {
+                printf("PauliSolver::setHsingle() - Updated Hsingle matrix\n");
+            }
+        }
+    }
+    
+    // Set the Coulomb interaction strength
+    void setW(double newW) {
+        if (W != newW) {
+            W = newW;
+            energies_updated = false;  // Energy values need to be recalculated
+            kernel_updated = false;    // Kernel matrix needs to be recalculated
+            if (verbosity > 1) {
+                printf("PauliSolver::setW() - Updated W to %f\n", W);
+            }
+        }
+    }
+    
+    // Set the lead tunneling amplitudes
+    void setTLeads(const double* newTLeads) {
+        if (TLeads && newTLeads) {
+            printf( "PauliSolver::setTLeads() [nleads=%i, nSingle=%i] \n", nleads, nSingle );
+            std::memcpy(TLeads, newTLeads, nleads * nSingle * sizeof(double));
+            coupling_updated = false;  // Coupling matrix needs to be recalculated
+            kernel_updated   = false;  // Kernel matrix needs to be recalculated
+            if (verbosity > 1) {
+                printf("PauliSolver::setTLeads() - Updated TLeads array\n");
+            }
+        }
+    }
+    
+    // Set state ordering
+    void setStateOrder(const int* newStateOrder) {
+        if (state_order && newStateOrder) {
+            std::memcpy(state_order, newStateOrder, nstates * sizeof(int));
+            energies_updated = false;  // Energy values need to be recalculated using new state order
+            coupling_updated = false;  // Coupling matrix needs to be recalculated
+            kernel_updated   = false;    // Kernel matrix needs to be recalculated
+            if (verbosity > 1) {
+                printf("PauliSolver::setStateOrder() - Updated state ordering\n");
+            }
+        }
+    }
+    
+    // Set lead parameters (mu, temp, gamma)
+    void setLeadParams(int leadIndex, double mu, double temp, double gamma) {
+        if (leadIndex >= 0 && leadIndex < nleads && leads) {
+            leads[leadIndex].mu = mu;
+            leads[leadIndex].temp = temp;
+            leads[leadIndex].gamma = gamma;
+            kernel_updated = false;  // Kernel matrix needs to be recalculated
+            if (verbosity > 1) {
+                printf("PauliSolver::setLeadParams() - Updated lead %d: mu=%f, temp=%f, gamma=%f\n",
+                       leadIndex, mu, temp, gamma);
+            }
+        }
+    }
+    
+    // Count number of electrons in a state
+    int count_electrons(int state) {
+        return __builtin_popcount(state);
+    }
+
+    void print_states_by_charge(){
+        printf("PauliSolver::print_states_by_charge(): " );
+        printf("[");
+        for(const auto& states : states_by_charge) {
+            printf("[");
+            for(size_t i = 0; i < states.size(); i++) {
+                printf("%d", states[i]);
+                if(i < states.size() - 1) printf(", ");
+            }
+            printf("]");
+        }
+        printf("]\n");
+    }
+
 
     /// Calculate state energies
-    void calculate_state_energies(const double* Hsingle, double W) {
-        // NOTE:
-        // is somewhat equivalent to construct_Ea_manybody(), diagonalise() and set_Ea() in /qmeq/qdot.py 
-        //printf("calculate_state_energies W=%f\n", W);
+    void calculate_state_energies() {
+        // NOTE: is somewhat equivalent to construct_Ea_manybody(), diagonalise() and set_Ea() in /qmeq/qdot.py 
+        printf("PauliSolver::calculate_state_energies() W=%f\n", W);
+        print_matrix(Hsingle, nSingle, nSingle, "%.6g");
         for(int i = 0; i < nstates; i++) {
             int state_idx = state_order[i];
             energies[i] = calculate_state_energy(state_idx, nSingle, Hsingle, W);
@@ -296,6 +415,25 @@ def construct_Tba(leads, tleads, Tba_=None):
         }
     }
 
+    // Update tunneling amplitudes after TLeads has changed
+    // Seems redundant - perahps we should call eval_lead_coupling() for each lead
+    void updateTunnelingAmplitudes() {
+        if (!coupling_updated && TLeads && coupling) {
+            if (verbosity > 1) {
+                printf("PauliSolver::updateTunnelingAmplitudes() - Recalculating tunneling amplitudes\n");
+            }
+            
+            // Zero the coupling matrix
+            std::memset(coupling, 0, nleads * nstates * nstates * sizeof(double));
+
+            for (int lead = 0; lead < nleads; lead++) {
+                eval_lead_coupling(lead, TLeads + lead * nSingle);
+            }
+                        
+            coupling_updated = true;
+        }
+    }
+
     /// Calculate tunneling amplitudes between states
     void calculate_tunneling_amplitudes(const double* TLeads) {
         memset(coupling, 0, nleads * nstates * nstates * sizeof(double));
@@ -303,91 +441,40 @@ def construct_Tba(leads, tleads, Tba_=None):
         for(int lead = 0; lead < nleads; lead++) {
             eval_lead_coupling(lead, TLeads + lead * nSingle);
         }
-        //if(_verbosity > 3) print_tunneling_amplitudes();
+        if(_verbosity > 1) print_tunneling_amplitudes();
         //exit(0);
         //exit(0);
     }
 
-    void print_tunneling_amplitudes() {  
-        int nstates2 = nstates * nstates;
-        for(int l = 0; l < nleads; l++) {  
-            //print_tunneling_amplitudes(l); 
-            printf("SolverParams::print_tunneling_amplitudes() Lead %i :\n", l);
-            print_matrix(coupling + l * nstates2, nstates, nstates, "%10.8f  " );
-        }
-    }
-
-    void print_state_energies() {
-        printf("SolverParams::print_state_energies(): \n");
-        printf("state_order: "); print_vector(state_order, nstates);
-        printf("energies: "); print_vector(energies, nstates);
-        //for(int i = 0; i < nstates; i++) { printf("%8.6f ", energies[i]); }
-        //printf("\n");
-    }
-
-    void print_lead_params() {
-        printf("SolverParams::print_lead_params(): \n");
-        for(int l = 0; l < nleads; l++) {  
-            printf("Lead %i mu: %8.6f temp: %8.6f gamma: %8.6f \n", l, leads[l].mu, leads[l].temp, leads[l].gamma);
-        }
-    }
-
-};
-
-// ==================================================
-//                PauliSolver
-// ==================================================
-
-class PauliSolver {
-public:
-    SolverParams params;
-    //int nstates;                     // Number of states
-    double* kernel=0;                  // Kernel matrix [nstates * nstates]
-    double* rhs=0;                     // Right-hand side vector [nstates]
-    double* probabilities=0;           // State probabilities [nstates]
-    //double* pauli_factors;           // Pauli factors for transitions [nleads * nstates * nstates * 2]
-    double* pauli_factors_compact=0;   // [nleads][ndm1][2]
-    int n_pauli_factors_compact=0;     // Number of Pauli factors in compact array
-    int ndm1;                       // Number of valid transitions (states differing by 1 charge)
-    int verbosity;        // Verbosity level for debugging
-    std::vector<std::vector<int>> states_by_charge;  // States organized by charge number, like Python's statesdm
-    std::vector<int> state_order;      // Maps original index -> ordered index
-    std::vector<int> state_order_inv;  // Maps ordered index -> original index
-    std::vector<int> state_order2;     // Maps original index -> ordered index
-
-    // from indexing.py of QmeQ
-    std::vector<int> lenlst;     // Number of states in each charge sector
-    std::vector<int> dictdm;      // State enumeration within charge sectors
-    std::vector<int> shiftlst0;  // Cumulative offsets
-    std::vector<int> shiftlst1;  // Cumulative offsets
-    std::vector<int> mapdm0;      // State pair mapping
-
-    // Count number of electrons in a state
-    int count_electrons(int state) {
-        return __builtin_popcount(state);
-    }
-
-    void print_states_by_charge(){
-        printf("PauliSolver::print_states_by_charge(): " );
-        printf("[");
-        for(const auto& states : states_by_charge) {
-            printf("[");
-            for(size_t i = 0; i < states.size(); i++) {
-                printf("%d", states[i]);
-                if(i < states.size() - 1) printf(", ");
+        // Update functions for recalculating internal data after parameter changes
+    
+    // Update state energies after Hsingle or W has changed
+    void updateStateEnergies() {
+        if (!energies_updated && Hsingle && energies && state_order) {
+            if (verbosity > 1) {
+                printf("PauliSolver::updateStateEnergies() - Recalculating state energies\n");
             }
-            printf("]");
+            
+            // Calculate energies for all states
+            for (int i = 0; i < nstates; i++) {
+                int state_idx = state_order[i];
+                energies[i] = calculate_state_energy(state_idx, nSingle, Hsingle, W);
+                if (verbosity > 2) {
+                    printf("  State %d (raw state %d): Energy = %g\n", i, state_idx, energies[i]);
+                }
+            }
+            
+            energies_updated = true;
         }
-        printf("]\n");
     }
-
+    
     int count_valid_transitions() {
-        //if(verbosity > 3) printf("PauliSolver::count_valid_transitions() states_by_charge.size() %li \n", states_by_charge.size()   );
+        if(verbosity > 3) printf("PauliSolver::count_valid_transitions() states_by_charge.size() %li \n", states_by_charge.size()   );
         int ndm1 = 0;
         for(int charge = 0; charge < states_by_charge.size()-1; charge++) {
             int nch0 = states_by_charge[charge  ].size();
             int nch1 = states_by_charge[charge+1].size();
-            //if(verbosity > 3) printf("PauliSolver::count_valid_transitions() charge %d nch0 %d nch1 %d nch1*nch0 %d ndm1 %d \n", charge, nch0, nch1, nch1*nch0, ndm1 );
+            if(verbosity > 3) printf("PauliSolver::count_valid_transitions() charge %d nch0 %d nch1 %d nch1*nch0 %d ndm1 %d \n", charge, nch0, nch1, nch1*nch0, ndm1 );
             ndm1 += nch1 * nch0;
         }
         return ndm1;
@@ -421,15 +508,13 @@ public:
 
     int get_ind_dm1(int c, int b, int bcharge) {
         // Replicate Python logic for mapping transitions to indices
+        if (verbosity > 3) {printf("get_ind_dm1(c=%d, b=%d, bcharge=%d)\n",   c, b, bcharge );}
         int ic = dictdm[c];
         int ib = dictdm[b];
         int index = ic * lenlst[bcharge] + ib + shiftlst1[bcharge];
-        //if (verbosity > 3) {printf("get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d (ic=%d, ib=%d)\n",   c, b, bcharge, index, ic, ib);}
+        if (verbosity > 3) {printf("get_ind_dm1(c=%d, b=%d, bcharge=%d) = %d (ic=%d, ib=%d)\n",   c, b, bcharge, index, ic, ib);}
         return index;
     }
-
-
-
 
     void init_map_dm0() {
         if(verbosity > 3) printf("PauliSolver::init_map_dm0()\n");
@@ -471,26 +556,40 @@ public:
     // Initialize these in init_states_by_charge()
     void init_indexing_maps() {
         if(verbosity > 3) printf("PauliSolver::init_indexing_maps()\n");
-        const int n = params.nstates;
+        const int n = nstates;
+        
+        // Clear previous data to avoid duplication
+        lenlst.clear();
+        dictdm.clear();
+        shiftlst0.clear();
+        shiftlst1.clear();
+        mapdm0.clear();
+        
+        // Resize arrays properly
         lenlst.resize(states_by_charge.size());
-        dictdm.resize(n);
+        dictdm.resize(n, 0);  // Initialize with zeros
         shiftlst0.resize(states_by_charge.size() + 1, 0);
         shiftlst1.resize(states_by_charge.size()    , 0);
 
-        int nq =  states_by_charge.size();
-        //printf("DEBUG 1 \n" );
+        int nq = states_by_charge.size();
+        if(verbosity > 3) printf("PauliSolver::init_indexing_maps() states_by_charge size: %d\n", nq);
+        
         // Fill the mapping arrays following QmeQ's logic
         for(int iq = 0; iq < nq; iq++) {
-            lenlst   [iq]   = states_by_charge[iq].size();
+            lenlst[iq] = states_by_charge[iq].size();
             int counter = 0;
             for(int state : states_by_charge[iq]) {
                 dictdm[state] = counter++;
             }
         }
-        //printf("DEBUG 2 \n" );
-        for(int iq = 0; iq < nq  ; iq++) { shiftlst0[iq+1] = shiftlst0[iq] + lenlst[iq] * lenlst[iq  ]; }
-        //printf("DEBUG 2.1 \n" );
-        for(int iq = 0; iq < nq-1; iq++) { shiftlst1[iq+1] = shiftlst1[iq] + lenlst[iq] * lenlst[iq+1]; }
+
+        for(int iq = 0; iq < nq; iq++) { 
+            shiftlst0[iq+1] = shiftlst0[iq] + lenlst[iq] * lenlst[iq]; 
+        }
+        
+        for(int iq = 0; iq < nq-1; iq++) { 
+            shiftlst1[iq+1] = shiftlst1[iq] + lenlst[iq] * lenlst[iq+1]; 
+        }
 
         init_map_dm0();
 
@@ -504,39 +603,66 @@ public:
     }
 
     void init_state_ordering() {
-        if(verbosity > 3) printf("PauliSolver::init_state_ordering()\n");
-        const int n = states_by_charge.empty() ? 0 :
-            std::accumulate(states_by_charge.begin(), states_by_charge.end(), 0,
-                [](int sum, const std::vector<int>& vec) { return sum + static_cast<int>(vec.size()); });
-        params.nstates = n;
-        state_order.resize(n);
-        state_order_inv.resize(n);
+        if(verbosity > 3) printf("PauliSolver::init_state_ordering() NSingle %d NState %d NCharge %ld \n", nSingle, nstates, states_by_charge.size() );
+        
+        // Clear previous mappings to prevent duplication
+        //state_order.clear();
+        //state_order_inv.clear();
+        
+        // Verify that we're working with the expected number of states (2^nSingle)
+        const int expected_nstates = 1 << nSingle; // 2^nSingle
+        if (nstates != expected_nstates) {
+            if(verbosity > 0) printf("Warning: nstates (%d) doesn't match expected 2^nSingle (%d)\n", nstates, expected_nstates);
+        }
+        
+        // Count total states from charge sectors (should match nstates)
+        const int n = states_by_charge.empty() ? 0 : 
+            std::accumulate(states_by_charge.begin(), states_by_charge.end(), 0, 
+                           [](int sum, const std::vector<int>& vec) { return sum + static_cast<int>(vec.size()); });
+        
+        if (n != nstates && verbosity > 0) {
+            printf("Warning: Total states in charge sectors (%d) doesn't match nstates (%d)\n", n, nstates);
+        }
+        
+        // Initialize state order mappings
+        //state_order.resize(nstates, 0);
+        //state_order_inv.resize(nstates, 0);
+        
         int idx = 0;
         for(int charge = 0; charge < states_by_charge.size(); charge++) {
             for(int state : states_by_charge[charge]) {
-                state_order[state]   = idx;
-                //state_order_inv[idx] = state;
-                idx++;
+                if (state >= 0 && state < nstates) {
+                    state_order[state] = idx;
+                    idx++;
+                } else if(verbosity > 0) {
+                    printf("Warning: Invalid state index %d in charge sector %d\n", state, charge);
+                }
             }
         }
-        // HACK - We change 3 and 4 ( for some reason  in QmeQ they are swapped)
-        //swap( state_order[3], state_order[4] );
-        idx=0;
-        for(int i: state_order) {
-            state_order_inv[i] = idx;
-            idx++;
+        
+        // Generate inverse mapping
+        for(int i = 0; i < nstates; i++) {
+            int ordered_idx = state_order[i];
+            if (ordered_idx >= 0 && ordered_idx < nstates) {
+                state_order_inv[ordered_idx] = i;
+            }
         }
         
         if(verbosity > 3) {
             printf("PauliSolver::init_state_ordering() original -> ordered\n");
-            for(int i = 0; i < n; i++) {   printf("%d -> %d\n", i, state_order[i]);    }
+            for(int i = 0; i < nstates; i++) {
+                printf("%d -> %d\n", i, state_order[i]);
+            }
         }
     }
 
     void init_states_by_charge() {
         if(verbosity > 3) printf("PauliSolver::init_states_by_charge()\n");
-        const int n = params.nstates;
+        const int n = nstates;
         int max_charge = 0;
+        
+        // Clear previous data first to prevent duplication
+        states_by_charge.clear();
         
         // First find maximum charge
         for(int i = 0; i < n; i++) {
@@ -589,44 +715,109 @@ public:
                     paulifct[l, cb, 1] = xcb*rez[1]  # Backward
     */
 
-    void generate_fct_compact() {
-        //if(verbosity > 3) printf("PauliSolver::generate_fct_compact()\n");
-        const int n = params.nstates;
-        ndm1 = count_valid_transitions(); 
-        //if(verbosity > 3)printf("PauliSolver::generate_fct_compact() ndm1 = %d\n", ndm1);
-        n_pauli_factors_compact = params.nleads * ndm1 * 2;
-        pauli_factors_compact = new double[n_pauli_factors_compact]();   // Allocate compact array
-        memset(pauli_factors_compact, 0, n_pauli_factors_compact * sizeof(double));
+    void generate_fct() {
+        if(verbosity > 3) printf("PauliSolver::generate_fct() - starting\n");
+        const int n = nstates;
+        
+        calculate_state_energies();
+        if(verbosity > 3){ 
+            printf("PauliSolver::generate_fct() - calculated state energies\n");
+            print_state_energies();
+        }
 
+        // Initialize states_by_charge ONLY if it's actually empty (prevent redundant initialization)
+        static bool initialized = false;
+        if(states_by_charge.empty() && !initialized) {
+            if(verbosity > 0) printf("Info: First-time initialization of states_by_charge\n");
+            init_states_by_charge();
+            initialized = true;
+        } else if(verbosity > 3) {
+            printf("PauliSolver::generate_fct() - using existing states_by_charge\n");
+        }
+        
+        // Ensure coupling matrix is initialized (but only if needed)
+        if(!coupling || !coupling_updated) {
+            if(verbosity > 0) printf("Info: Initializing coupling matrix\n");
+            if(TLeads) {
+                calculate_tunneling_amplitudes(TLeads);
+                coupling_updated = true;
+            } else {
+                printf("Error: TLeads not set, cannot generate coupling matrix\n");
+                return;
+            }
+        }
+        
+        // Count valid transitions
+        ndm1 = count_valid_transitions(); 
+        if(verbosity > 3) printf("PauliSolver::generate_fct() ndm1 = %d\n", ndm1);
+        
+        // Calculate size of compact pauli factors array
+        n_pauli_factors = nleads * ndm1 * 2;
+        if(verbosity > 3) printf("PauliSolver::generate_fct() n_pauli_factors = %d\n", n_pauli_factors);
+        
+        // Free previous pauli_factors if it exists
+        delete[] pauli_factors;
+        
+        // Allocate compact array with zero initialization
+        pauli_factors = new double[n_pauli_factors]();
+        
         int n2 = n * n;
         
-        // Iterate through charge states
+        // Calculate transitions between adjacent charge states
         for(int charge = 0; charge < states_by_charge.size()-1; charge++) {
             int next_charge = charge + 1;
+            
+            //if(next_charge >= states_by_charge.size()) { if(verbosity > 0) printf("Warning: next_charge %d out of bounds %zu\n", next_charge, states_by_charge.size()); continue;}
+            
+            // Process all transitions between these charge sectors
             for(int c : states_by_charge[next_charge]) {
+                //if(c < 0 || c >= n) {  if(verbosity > 0) printf("Warning: State index c = %d out of bounds [0, %d]\n", c, n-1); continue;}
+                
                 for(int b : states_by_charge[charge]) {
-                    int cb = get_ind_dm1(c, b, charge);  // Get compact index
-                    double energy_diff = params.energies[c] - params.energies[b];
+                    //if(b < 0 || b >= n) {  if(verbosity > 0) printf("Warning: State index b = %d out of bounds [0, %d]\n", b, n-1); continue;}
                     
-                    for(int l = 0; l < params.nleads; l++) {
-                        // Calculate coupling
-                        double tij = params.coupling[l * n2 + b*n + c];
-                        double tji = params.coupling[l * n2 + c*n + b];
+                    // Get compact index for this transition
+                    int cb = get_ind_dm1(c, b, charge);
+
+                    //if(cb < 0 || cb >= ndm1) { if(verbosity > 0) printf("Warning: Compact index cb = %d out of bounds [0, %d]\n", cb, ndm1-1);continue;}
+                    
+                    // Calculate energy difference for this transition (same as in Python)
+                    double energy_diff = energies[c] - energies[b];
+                    if(verbosity > 2) printf("PauliSolver::generate_fct() state energies: E[%d]=%f, E[%d]=%f, diff=%f\n", c, energies[c], b, energies[b], energy_diff);
+                    
+                    // Process all leads
+                    for(int l = 0; l < nleads; l++) {
+                        // Calculate array indices safely
+                        int idx_ij = l * n2 + b*n + c;
+                        int idx_ji = l * n2 + c*n + b;
+                        
+                        //if(idx_ij < 0 || idx_ij >= nleads * n2 || idx_ji < 0 || idx_ji >= nleads * n2) {if(verbosity > 0) printf("Warning: Coupling index out of bounds: l=%d, b=%d, c=%d\n", l, b, c); continue;}
+                        
+                        // Get coupling factors
+                        double tij = coupling[idx_ij];
+                        double tji = coupling[idx_ji];
                         double coupling_val = tij * tji;
                         
-                        // Calculate Fermi factor
-                        const LeadParams& lead = params.leads[l];
+                        // Apply Fermi statistics
+                        const LeadParams& lead = leads[l];
                         double fermi = fermi_func(energy_diff, lead.mu, lead.temp);
                         
-                        // Store in compact format
+                        // Calculate compact storage index
                         int idx = l * ndm1 * 2 + cb * 2;
-                        pauli_factors_compact[idx + 0] = coupling_val *        fermi  * 2 * PI;
-                        pauli_factors_compact[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI;
-                        //if(verbosity > 3){printf("generate_fct_compact() l: %d i: %d j: %d cb: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f, %.6f ]\n", l, c, b, cb, energy_diff, coupling_val, fermi, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);}
+                        
+                        //if(idx < 0 || idx+1 >= n_pauli_factors) { if(verbosity > 0) printf("Warning: pauli_factors index out of bounds: l=%d, cb=%d, idx=%d, max=%d\n", l, cb, idx, n_pauli_factors-1);  continue;}
+                        
+                        // Store forward and backward rates
+                        pauli_factors[idx + 0] = coupling_val *        fermi  * 2 * PI;  // Forward
+                        pauli_factors[idx + 1] = coupling_val * (1.0 - fermi) * 2 * PI;  // Backward
+                        
+                        if(verbosity > 3) {printf("generate_fct() l: %d i: %d j: %d cb: %d E_diff: %.6f coupling: %.6f fermi: %.6f factors:[ %.6f, %.6f ]\n", l, c, b, cb, energy_diff, coupling_val, fermi, pauli_factors[idx + 0], pauli_factors[idx + 1]); }
                     }
                 }
             }
         }
+        
+        if(verbosity > 3) printf("PauliSolver::generate_fct() - completed\n");
     }
 
     /// @brief Adds a real value (fctp) to the matrix element connecting the states bb and aa in the Pauli kernel. 
@@ -637,7 +828,7 @@ public:
     /// @param aa Index of the second state.
     /// @note Modifies the internal kernel matrix.
     void set_matrix_element_pauli(double fctm, double fctp, int bb, int aa) {
-        int n = params.nstates;
+        int n = nstates;
         // Only apply matrix updates if indices are within bounds
         // This matches Python's behavior of silently ignoring out-of-bounds indices
         if(bb < n && aa < n) {
@@ -649,13 +840,13 @@ public:
         }
     }
 
-    inline int index_paulifct        (int l, int i, int j){ return 2*( j + params.nstates*( i + l*params.nstates )); }
-    inline int index_paulifct_compact(int l, int i) { 
+    //inline int index_paulifct        (int l, int i, int j){ return 2*( j + nstates*( i + l*nstates )); }
+    inline int index_paulifct(int l, int i) { 
         int idx = 2*( i + ndm1*l);
         // if(verbosity > 3) {
-        //     printf("index_paulifct_compact(l=%d, i=%d) = %d (ndm1=%d, array_size=%i)\n",  l, i, idx, ndm1, n_pauli_factors_compact);
+        //     printf("index_paulifct(l=%d, i=%d) = %d (ndm1=%d, array_size=%i)\n",  l, i, idx, ndm1, n_pauli_factors);
         //     // Check if index is out of bounds
-        //     if (idx < 0 || idx + 1 >= n_pauli_factors_compact) {printf("ERROR: index_paulifct_compact result %d is out of bounds for array size %i\n", idx, n_pauli_factors_compact);}
+        //     if (idx < 0 || idx + 1 >= n_pauli_factors) {printf("ERROR: index_paulifct result %d is out of bounds for array size %i\n", idx, n_pauli_factors);}
         // }
         return idx;
     }
@@ -698,9 +889,9 @@ public:
             kh.set_matrix_element_pauli(fctm, fctp, bb, cc)
 */
 
-    void generate_coupling_terms_compact(int b) {
+    void generate_coupling_terms(int b) {
 
-        const int n = params.nstates;
+        const int n = nstates;
         const int Q = count_electrons(b);
         const int max_charge = states_by_charge.size() - 1;
 
@@ -708,13 +899,13 @@ public:
         int bb = state_order2[b];
         //int bb = get_ind_dm0(b, b, Q);  // Transform to density matrix index, matching Python approach
 
-        if(verbosity > 3){  printf("PauliSolver::generate_coupling_terms_compact() b: %i Q: %i \n", b, Q );  }
+        if(verbosity > 3){  printf("PauliSolver::generate_coupling_terms() b: %i Q: %i \n", b, Q );  }
 
         int n2 = n * n;
 
         if( Q>0 ){ // Handle transitions from lower charge states (a -> b)
             int Qlower=Q-1;
-            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms_compact() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
+            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms() Q-1 states: " );  print_vector( states_by_charge[Qlower].data(), states_by_charge[Qlower].size()); }          // for (int a : states_by_charge[Q-1]) printf("%i ", a); printf("\n");
             
             for (int a : states_by_charge[Qlower]) {
                 //if (get_changed_site(b, a) == -1) continue;
@@ -730,12 +921,12 @@ public:
                 // }
                 
                 double fctm = 0.0, fctp = 0.0;
-                for (int l = 0; l < params.nleads; l++) {
+                for (int l = 0; l < nleads; l++) {
                     //int idx = l * n2 * 2 + b * n * 2 + a * 2;
-                    int idx = index_paulifct_compact( l, ba );
-                    //if(verbosity > 3) { printf("FACTOR-LOWER: lead=%d, ba=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, ba, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);}
-                    fctm -= pauli_factors_compact[idx + 1];
-                    fctp += pauli_factors_compact[idx + 0];
+                    int idx = index_paulifct( l, ba );
+                    //if(verbosity > 3) { printf("FACTOR-LOWER: lead=%d, ba=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, ba, idx, idx, idx+1, pauli_factors[idx + 0], pauli_factors[idx + 1]);}
+                    fctm -= pauli_factors[idx + 1];
+                    fctp += pauli_factors[idx + 0];
                 }
                 
                 if(verbosity > 3){ printf("set_matrix_element_pauli() LOWER [%i,%i] fctm: %.6f fctp: %.6f    bb: %i aa: %i \n", b, a, fctm, fctp, bb, aa); }
@@ -744,7 +935,7 @@ public:
         }        
         if( Q<states_by_charge.size()-1 ){ // Handle transitions to higher charge states (b -> c) 
             int Qhigher=Q+1;
-            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms_compact() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
+            if(verbosity > 3){ printf("PauliSolver::generate_coupling_terms() Q+1 states: " );  print_vector( states_by_charge[Qhigher].data(), states_by_charge[Qhigher].size() ); } 
             for (int c : states_by_charge[Qhigher]) {
                 //if (get_changed_site(b, c) == -1) continue;
 
@@ -759,12 +950,12 @@ public:
                 // }
                 
                 double fctm = 0.0, fctp = 0.0;
-                for (int l = 0; l < params.nleads; l++) {
+                for (int l = 0; l < nleads; l++) {
                     //int idx = l * n2 * 2 + c * n * 2 + b * 2;
-                    int idx = index_paulifct_compact( l, cb );
-                    //if(verbosity > 3) { printf("FACTOR-HIGHER: lead=%d, cb=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, cb, idx, idx, idx+1, pauli_factors_compact[idx + 0], pauli_factors_compact[idx + 1]);}
-                    fctm -= pauli_factors_compact[idx + 0];
-                    fctp += pauli_factors_compact[idx + 1];
+                    int idx = index_paulifct( l, cb );
+                    //if(verbosity > 3) { printf("FACTOR-HIGHER: lead=%d, cb=%d, idx=%d, idx+0=%d, idx+1=%d, factor[0]=%.6f, factor[1]=%.6f\n", l, cb, idx, idx, idx+1, pauli_factors[idx + 0], pauli_factors[idx + 1]);}
+                    fctm -= pauli_factors[idx + 0];
+                    fctp += pauli_factors[idx + 1];
                 }
                 //int cc = c * n + c;
                 
@@ -777,7 +968,7 @@ public:
     }
 
     void normalize_kernel() {
-        const int n = params.nstates;
+        const int n = nstates;
         // Set first row to all ones (like Python)
         for(int j = 0; j < n; j++) { kernel[j] = 1.0; }        
         // if(verbosity > 3) {
@@ -791,30 +982,42 @@ public:
     void generate_kern() {
         if(verbosity > 0) printf("\nPauliSolver::generate_kern() Building kernel matrix...\n");
         // -- set kernel to zero using memset
-        memset(kernel, 0, sizeof(double) * params.nstates * params.nstates);
+        memset(kernel, 0, sizeof(double) * nstates * nstates);
         state_order2 = {0,1,2,4,3,5,6,7};
         
-
         if(verbosity > 1) {
-            printf("PauliSolver::generate_fct()\n");
-            params.print_lead_params();
-            params.print_state_energies();
-            params.print_tunneling_amplitudes();
+            printf("PauliSolver::generate_kern() starting\n");
+            print_lead_params();
+            print_state_energies();
+            print_tunneling_amplitudes();
             print_states_by_charge();
         }
 
-        const int n = params.nstates;
-        //generate_fct();
-        init_states_by_charge();
-        generate_fct_compact();
+        const int n = nstates;
+        
+        // IMPORTANT: Only initialize states if needed - do not regenerate Pauli factors here
+        // This avoids the double calculation problem when generate_fct() is called separately
+        if(states_by_charge.empty()) {
+            if(verbosity > 0) printf("PauliSolver::generate_kern() - initializing states_by_charge\n");
+            init_states_by_charge();
+        }
+
+        // IMPORTANT: Check if pauli_factors have been calculated already
+        // Only regenerate if they haven't been calculated yet
+        if(pauli_factors == nullptr || n_pauli_factors == 0) {
+            if(verbosity > 0) printf("PauliSolver::generate_kern() - pauli_factors not yet calculated, generating now\n");
+            generate_fct();
+        } else if(verbosity > 0) {
+            printf("PauliSolver::generate_kern() - using pre-calculated pauli_factors\n");
+        }
 
         if(verbosity > 0) {
-            printf("PauliSolver::generate_kern().1 after generate_fct()\n");
-            //printf("pauli_factors:\n");
-            //print_matrix(pauli_factors, n, n, "%16.8f");
-            printf("pauli_factors_compact[nlead%i,ndm1=%i,%i]:\n", params.nleads, ndm1, 2);
-            printf("pauli_factors_compact[lead=0]:\n");  print_matrix(pauli_factors_compact       , ndm1, 2, "%16.8f");
-            printf("pauli_factors_compact[lead=1]:\n");  print_matrix(pauli_factors_compact+ndm1*2, ndm1, 2, "%16.8f");
+            printf("PauliSolver::generate_kern().1 kernel generation\n");
+            printf("pauli_factors[nlead%i,ndm1=%i,%i]:\n", nleads, ndm1, 2);
+            printf("pauli_factors[lead=0]:\n");  print_matrix(pauli_factors       , ndm1, 2, "%16.8f");
+            printf("pauli_factors[lead=1]:\n");  print_matrix(pauli_factors+ndm1*2, ndm1, 2, "%16.8f");
+            //printf("DO NOT GO ANY FURTHER IN DEBUGGING UNTIL pauli_factors agree with python QmeQ reference \n");
+            //exit(0);
         }
 
         //exit(0);
@@ -825,7 +1028,7 @@ public:
             int b = state_order_inv[state];
             //generate_coupling_terms(b); 
             if(verbosity > 2) { printf("\n---- PauliSolver::generate_kern() -> generate_coupling_terms( istate=%i -> b=%i ) \n", state, b); }
-            generate_coupling_terms_compact(b);
+            generate_coupling_terms(b);
         }
         if(verbosity > 1) { 
             printf("\nPauliSolver::generate_kern() final kernel:\n");
@@ -840,7 +1043,7 @@ public:
 
     // Solve the kernel matrix equation
     void solve_kern() {
-        const int n = params.nstates;
+        const int n = nstates;
         
         // Create a copy of kernel matrix since solve() modifies it
         double* kern_copy = new double[n * n];
@@ -882,6 +1085,68 @@ public:
         delete[] kern_copy;
         delete[] rhs;
     }
+    
+    // Update kernel matrix when parameters have changed
+    void updateKernelMatrix() {
+        if (!kernel_updated) {
+            // Make sure energies and coupling are up to date
+            updateStateEnergies();
+            updateTunnelingAmplitudes();
+            
+            // Now generate the kernel matrix
+            generate_kern();
+            
+            kernel_updated = true;
+        }
+    }
+    
+    // Solve the master equation with optional parameter updates
+    void solve() {
+        // Check if any parameters were changed and update as needed
+        updateKernelMatrix();
+        
+        // Solve the kernel matrix equation
+        solve_kern();
+    }
+    
+    // Print methods for debugging
+    void print_lead_params() const {
+        printf("PauliSolver::print_lead_params() nleads: %d\n", nleads);
+        for (int l = 0; l < nleads; l++) {
+            printf("  Lead %d: mu=%.6f, temp=%.6f, gamma=%.6f\n", l, leads[l].mu, leads[l].temp, leads[l].gamma);
+        }
+    }
+    
+    void print_state_energies() const {
+        printf("PauliSolver::print_state_energies() nstates: %d\n", nstates);
+        for (int i = 0; i < nstates; i++) {
+            printf("  State %d(->%d): Energy=%.6f\n", i, state_order[i], energies[i]);
+        }
+    }
+    
+    void print_tunneling_amplitudes() const {
+        printf("PauliSolver::print_tunneling_amplitudes() coupling:%p\n", coupling);
+        if (!coupling) return;
+        int n2 = nstates * nstates;
+        for (int l = 0; l < nleads; l++) {
+            printf("  Lead %d:\n", l);
+            print_matrix(coupling + l * n2, nstates, nstates, "%16.8f");
+        }
+    }
+    
+    void print_states_by_charge() const {
+        printf("PauliSolver::print_states_by_charge():\n");
+        for (int i = 0; i < states_by_charge.size(); i++) {
+            printf("  Charge %d: [", i);
+            for (int j = 0; j < states_by_charge[i].size(); j++) {
+                printf("%d", states_by_charge[i][j]);
+                if (j < states_by_charge[i].size() - 1) {
+                    printf(", ");
+                }
+            }
+            printf("]\n");
+        }
+    }
 
 /*
     void generate_current(int b, double* rho, double* current) {
@@ -898,9 +1163,9 @@ public:
                 const int aa = state_order2[a];
                 const int ba = get_ind_dm1(b, a, Qlower);
                 for(int l=0; l<params.nleads; l++) {
-                    const int idx = index_paulifct_compact(l, ba);
-                    const double fct_enter = pauli_factors_compact[idx];
-                    const double fct_leave = pauli_factors_compact[idx+1];
+                    const int idx = index_paulifct(l, ba);
+                    const double fct_enter = pauli_factors[idx];
+                    const double fct_leave = pauli_factors[idx+1];
                     current[l] += (rho[bb] - rho[aa]) * (fct_enter - fct_leave);
                     if(verbosity > 3) { printf("l:%d a:%d ba:%d idx:%d fct+:%.6f fct-:%.6f\n", l, a, ba, idx, fct_enter, fct_leave); }
                 }
@@ -913,9 +1178,9 @@ public:
                 const int cc = state_order2[c];
                 const int cb = get_ind_dm1(c, b, Q);
                 for(int l=0; l<params.nleads; l++) {
-                    const int idx = index_paulifct_compact(l, cb);
-                    const double fct_enter = pauli_factors_compact[idx];
-                    const double fct_leave = pauli_factors_compact[idx+1];
+                    const int idx = index_paulifct(l, cb);
+                    const double fct_enter = pauli_factors[idx];
+                    const double fct_leave = pauli_factors[idx+1];
                     current[l] += (rho[cc] - rho[bb]) * (fct_enter - fct_leave);
                     if(verbosity > 3) {printf("l:%d c:%d cb:%d idx:%d fct+:%.6f fct-:%.6f\n", l, c, cb, idx, fct_enter, fct_leave); }
                 }
@@ -923,29 +1188,6 @@ public:
         }
     }
 */
-
-    PauliSolver(const SolverParams& p, int verb = 0) : params(p), verbosity(verb) {
-        const int n = params.nstates;
-        kernel = new double[n * n];
-        rhs = new double[n];
-        probabilities = new double[n];
-        //pauli_factors = new double[params.nleads * n * n * 2];
-        //printf("DEBUG: PauliSolve() DONE verbosity=%i \n", verbosity);
-    }
-
-    ~PauliSolver() {
-        delete[] kernel;
-        delete[] rhs;
-        delete[] probabilities;
-        //delete[] pauli_factors;
-        delete[] pauli_factors_compact;
-    }
-
-    // Solve the master equation
-    void solve() {
-        generate_kern();  // First generate the kernel matrix
-        solve_kern();     // Then solve it
-    }
 
     // Calculate current through a specific lead using the compact structure
     double generate_current(int lead_idx) {
@@ -967,9 +1209,9 @@ public:
                     const int cb = get_ind_dm1(c, b, charge);
                     
                     // Get factors from compact structure
-                    const int idx = index_paulifct_compact(lead_idx, cb);
-                    const double fct_enter = pauli_factors_compact[idx];     // Electron entering (b -> c)
-                    const double fct_leave = pauli_factors_compact[idx + 1]; // Electron leaving (c -> b)
+                    const int idx = index_paulifct(lead_idx, cb);
+                    const double fct_enter = pauli_factors[idx];     // Electron entering (b -> c)
+                    const double fct_leave = pauli_factors[idx + 1]; // Electron leaving (c -> b)
                     
                     // Calculate current contribution
                     double fct1 = probabilities[bb] * fct_enter;   // Electron entering: phi0[bb] * paulifct[l, cb, 0]
@@ -1035,7 +1277,7 @@ public:
     // Getter methods
     const double* get_kernel()        const { return kernel; }
     const double* get_probabilities() const { return probabilities; }
-    const double* get_energies()      const { return params.energies; }
+    const double* get_energies()      const { return energies; }
     const double* get_rhs()           const { return rhs; }
-    const double* get_pauli_factors() const { return pauli_factors_compact; }
+    const double* get_pauli_factors() const { return pauli_factors; }
 };
