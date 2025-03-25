@@ -24,8 +24,8 @@ from qmeq import config
 from qmeq import indexing as qmqsi
 from qmeq.config import verb_print_
 
-import pauli_solver_lib as psl
-from pauli_solver_lib import PauliSolver
+import pauli_lib as psl
+from pauli_lib import PauliSolver
 
 # setup numpy print options to infinite line length
 np.set_printoptions(linewidth=256, suppress=True)
@@ -139,22 +139,14 @@ def run_QmeQ_solver(eps1, eps2, eps3):
     
     return qmeq_res
 
-def run_cpp_solver(pauli, eps1, eps2, eps3):
-    """Run C++ solver with the given parameters"""
-    if verbosity > 0:
-        print( "\n\n" )
-        print( "######################################################################" )
-        print( "######################################################################" )
-        print( "\n### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp \n" )
-    
-    NStates = 2**NSingle
+def prepare_cpp_inputs(eps1, eps2, eps3):
+    """Prepare inputs for C++ solver"""
     
     mu_L, Temp_L, TLeads = build_leads(muS, muT, Temp, VS, VT, coeffT, VBias)
     Hsingle, Hcoulomb    = build_hamiltonian(eps1, eps2, eps3, t, W)
-    
-    lead_mu = np.array([muS, muT + VBias])
-    lead_temp = np.array([Temp, Temp])
-    lead_gamma = np.array([GammaS, GammaT])
+    lead_mu    = np.array([muS    , muT + VBias ])
+    lead_temp  = np.array([Temp   , Temp        ])
+    lead_gamma = np.array([GammaS , GammaT      ])
     
     # Convert TLeads dictionary to matrix form
     TLeads_ = np.zeros((NLeads, NSingle))
@@ -168,10 +160,69 @@ def run_cpp_solver(pauli, eps1, eps2, eps3):
     if verbosity > 0:
         print("\nHsingle:");        print(Hsingle_)
         print("\nTLeads:");         print(TLeads_)
+    return Hsingle_, TLeads_, lead_mu, lead_temp, lead_gamma
+
+def prepare_cpp_inputs_efficient(eps1, eps2, eps3):
+    """Efficiently prepare inputs for C++ solver using numpy arrays directly"""
+    # Single particle Hamiltonian
+    Hsingle = np.array([
+        [eps1, t, 0],
+        [t, eps2, t], 
+        [0, t, eps3]])
     
-    # State ordering - exactly as in compare_solvers.py
+    # Leads
+    lead_mu    = np.array([muS,    muT + VBias ] )
+    lead_temp  = np.array([Temp,   Temp        ] )
+    lead_gamma = np.array([GammaS, GammaT      ] )  
+    # Lead Tunneling matrix
+    TLeads = np.array([
+        [VS, VS        , VS       ],
+        [VT, VT*coeffT , VT*coeffT]])
+    
+    return Hsingle, TLeads, lead_mu, lead_temp, lead_gamma
+
+def prepare_leads_cpp():
+    """Prepare static inputs that don't change with eps"""
+    # Leads
+    lead_mu = np.array([muS, muT + VBias])
+    lead_temp = np.array([Temp, Temp])
+    lead_gamma = np.array([GammaS, GammaT])
+    # Lead Tunneling matrix
+    TLeads = np.array([
+        [VS, VS, VS],
+        [VT, VT*coeffT, VT*coeffT]
+    ])    
+    return TLeads, lead_mu, lead_temp, lead_gamma
+
+def prepare_hsinglecpp(eps1, eps2, eps3):
+    """Prepare dynamic inputs that change with eps"""
+    # Single particle Hamiltonian
+    Hsingle = np.array([
+        [eps1, t, 0],
+        [t, eps2, t],
+        [0, t, eps3]
+    ])
+    return Hsingle
+
+def run_cpp_solver(pauli, eps1, eps2, eps3):
+    """Run C++ solver with the given parameters"""
+    if verbosity > 0:
+        print( "\n\n" )
+        print( "######################################################################" )
+        print( "######################################################################" )
+        print( "\n### Running C++ solver /home/prokop/git_SW/qmeq/cpp/pauli_solver.hpp \n" )
+    
+    #Hsingle_, TLeads_, lead_mu, lead_temp, lead_gamma = prepare_cpp_inputs(eps1, eps2, eps3)
+    #Hsingle_, TLeads_, lead_mu, lead_temp, lead_gamma = prepare_cpp_inputs_efficient(eps1, eps2, eps3)
+    
+    # --- prepare static inputs - this does not change when we change eps
     state_order = [0, 4, 2, 6, 1, 5, 3, 7]
     state_order = np.array(state_order, dtype=np.int32)
+    TLeads_, lead_mu, lead_temp, lead_gamma = prepare_leads_cpp()
+    NStates = 2**NSingle
+
+    # --- prepare dynamic inputs - this changes when we change eps
+    Hsingle_ = prepare_hsinglecpp(eps1, eps2, eps3)
     
     # Create and run solver
     solver = pauli.create_pauli_solver_new(NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, state_order, verbosity)
@@ -184,10 +235,10 @@ def run_cpp_solver(pauli, eps1, eps2, eps3):
     pauli.solve(solver)
     
     # Get detailed results for comparison
-    kernel = pauli.get_kernel(solver, NStates)
+    kernel         = pauli.get_kernel(solver, NStates)
     probabilities = pauli.get_probabilities(solver, NStates)
-    currents = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
-    Tba = pauli.get_coupling(solver, NLeads, NStates)
+    currents      = [pauli.calculate_current(solver, lead) for lead in range(NLeads)]
+    Tba           = pauli.get_coupling(solver, NLeads, NStates)
     pauli_factors = pauli.get_pauli_factors(solver, NLeads, NStates)
     
     if verbosity > 0:
@@ -244,8 +295,6 @@ def compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True):
             print(f"  State {i}: QmeQ={qp}, C++={cp}, Diff={diff}")
 
 if __name__ == "__main__":
-
-
     print( "\n\n" )
     print( "##################################################################################" )
     print( "##################################################################################" )

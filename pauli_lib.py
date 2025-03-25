@@ -16,7 +16,7 @@ class PauliSolver:
         self.verbosity = verbosity
         
 
-    def _compile_and_load(self, name='pauli_solver_wrapper'):
+    def _compile_and_load(self, name='pauli_lib'):
         """Compile and load the C++ library"""
         cpp_dir = os.path.join(work_dir(__file__), 'cpp')
         so_name = name + '.so'

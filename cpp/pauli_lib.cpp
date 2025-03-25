@@ -1,6 +1,6 @@
 static int _verbosity = 0;
 
-#include "pauli_solver.hpp"
+#include "pauli.hpp"
 #include <cstdio>
 #include "print_utils.hpp"
 

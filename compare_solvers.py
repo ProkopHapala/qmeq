@@ -31,8 +31,8 @@ import traceback
 # setup numpy print options to infinite line length
 np.set_printoptions(linewidth=256, suppress=True)
 
-import pauli_solver_lib as psl
-from pauli_solver_lib import PauliSolver #, calculate_state_energy, calculate_tunneling_amplitudes
+import pauli_lib as psl
+from pauli_lib import PauliSolver #, calculate_state_energy, calculate_tunneling_amplitudes
 
 # System parameters
 NSingle = 3  # number of impurity states
