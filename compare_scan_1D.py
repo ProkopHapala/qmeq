@@ -194,7 +194,7 @@ def prepare_leads_cpp():
     ])    
     return TLeads, lead_mu, lead_temp, lead_gamma
 
-def prepare_hsinglecpp(eps1, eps2, eps3):
+def prepare_hsingle_cpp(eps1, eps2, eps3):
     """Prepare dynamic inputs that change with eps"""
     # Single particle Hamiltonian
     Hsingle = np.array([
@@ -222,7 +222,7 @@ def run_cpp_solver(pauli, eps1, eps2, eps3):
     NStates = 2**NSingle
 
     # --- prepare dynamic inputs - this changes when we change eps
-    Hsingle_ = prepare_hsinglecpp(eps1, eps2, eps3)
+    Hsingle_ = prepare_hsingle_cpp(eps1, eps2, eps3)
     
     # Create and run solver
     solver = pauli.create_pauli_solver_new(NStates, NLeads, Hsingle_, W, TLeads_, lead_mu, lead_temp, lead_gamma, state_order, verbosity)
@@ -309,27 +309,39 @@ if __name__ == "__main__":
     # Instead of generating energy range, use exact values from compare_solvers.py
     eps = np.zeros((nstep,3))
     ts = np.linspace(0, 1.0, nstep)
-    eps[:,0] = eps1 + ts   # eps1 from compare_solvers.py
-    eps[:,1] = eps2 + ts  # eps2 from compare_solvers.py
-    eps[:,2] = eps3 + ts  # eps3 from compare_solvers.py
+    eps[:,0] = eps1 + ts  
+    eps[:,1] = eps2 + ts  
+    eps[:,2] = eps3 + ts  
 
     verbosity = 0  # Match compare_solvers.py verbosity
     
-    pauli = PauliSolver(verbosity=verbosity, bASAN=bASAN)
+    # Prepare Pauli solver C++
+    state_order = [0, 4, 2, 6, 1, 5, 3, 7]
+    state_order = np.array(state_order, dtype=np.int32)
+    TLeads_, lead_mu, lead_temp, lead_gamma = prepare_leads_cpp()
+    NStates  = 2**NSingle
+    Hsingle_ = prepare_hsingle_cpp(eps1, eps2, eps3)
+
+    pauli  = PauliSolver(NSingle, NLeads, verbosity=verbosity )
+    pauli.set_leads(lead_mu, lead_temp, lead_gamma)
+    pauli.set_tunneling(TLeads_)
 
     Iqmeq = np.zeros(nstep)
     Icpp  = np.zeros(nstep)
-    
-
     for i in range(nstep):
         epsi = eps[i]
         if verbosity > 0: print(f"\n####### compare_scan_1D.py loop [{i}] epsi: {epsi}")
         qmeq_res = run_QmeQ_solver(epsi[0], epsi[1], epsi[2])
-        cpp_res  = run_cpp_solver(pauli, epsi[0], epsi[1], epsi[2])
-        print(f"Eps[{i}] {epsi} Current: QmeQ: {qmeq_res['current']} C++: {cpp_res['current']} | Diff: {abs(qmeq_res['current'] - cpp_res['current'])}")
+        
+        #cpp_res  = run_cpp_solver(pauli, epsi[0], epsi[1], epsi[2])
+
+        Hsingle_ = prepare_hsingle_cpp(epsi[0], epsi[1], epsi[2])
+        I1 = pauli.solve_hsingle(Hsingle_, W, 0, state_order)
+
+        print(f"Eps[{i}] {epsi} Current: QmeQ: {qmeq_res['current']} C++: {I1} | Diff: {abs(qmeq_res['current'] - I1)}")
         #compare_results(qmeq_res, cpp_res, tol=1e-8, bPrintSame=True)
         Iqmeq[i] = qmeq_res['current']
-        Icpp[i]  = cpp_res['current']
+        Icpp[i]  = I1
 
     plt.figure(figsize=(10, 6))
     plt.plot(ts, Iqmeq, 'o-b', label='QmeQ Pauli')

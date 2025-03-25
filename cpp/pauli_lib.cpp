@@ -76,7 +76,7 @@ void solve_pauli(void* solver_ptr) {
 }
 
 double solve_hsingle( void* solver_ptr, double* hsingle, double W, int ilead, int* state_order ){
-    printf("solve_hsingle() ilead: %d W: %g\n", ilead, W);
+    //printf("solve_hsingle() ilead: %d W: %g\n", ilead, W);
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
     if (solver) {
         solver->W = W;
@@ -85,6 +85,7 @@ double solve_hsingle( void* solver_ptr, double* hsingle, double W, int ilead, in
         if(state_order) { solver->setStateOrder(state_order); }
         solver->generate_fct();
         solver->generate_kern();
+        solver->solve();
         if(ilead >= 0) {
             return solver->generate_current(ilead);
         }

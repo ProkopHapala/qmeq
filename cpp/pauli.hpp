@@ -76,7 +76,7 @@ def construct_Ea_manybody(valslst, si):
     return Ea
 */
 double calculate_state_energy(int state, int nSingle, const double* Hsingle, double W) {
-    printf("DEBUG calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
+    //printf("calculate_state_energy() state: %i nSingle: %i Hsingle: %p W: %f \n", state, nSingle, Hsingle, W );
     double energy = 0.0;
     // Single-particle energies
     for(int i = 0; i < nSingle; i++) {
@@ -337,8 +337,11 @@ public:
     /// Calculate state energies
     void calculate_state_energies() {
         // NOTE: is somewhat equivalent to construct_Ea_manybody(), diagonalise() and set_Ea() in /qmeq/qdot.py 
-        printf("PauliSolver::calculate_state_energies() W=%f\n", W);
-        print_matrix(Hsingle, nSingle, nSingle, "%.6g");
+        if(verbosity > 1) {
+            printf("PauliSolver::calculate_state_energies() W=%f\n", W);
+            printf("PauliSolver::calculate_state_energies() Hsingle:\n");
+            print_matrix(Hsingle, nSingle, nSingle, " %16.8g");
+        }
         for(int i = 0; i < nstates; i++) {
             int state_idx = state_order[i];
             energies[i] = calculate_state_energy(state_idx, nSingle, Hsingle, W);
