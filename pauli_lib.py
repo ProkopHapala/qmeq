@@ -6,7 +6,6 @@ import ctypes
 from ctypes import  c_void_p, c_int, c_double
 from cpp_utils_ import compile_lib, work_dir, _np_as,   c_double_p, c_int_p
 
-
 class PauliSolver:
     """Python wrapper for C++ PauliSolver class"""
     
@@ -77,6 +76,10 @@ class PauliSolver:
         
         self.lib.solve_pauli.argtypes = [c_void_p]
         self.lib.solve_pauli.restype  = None
+
+        # double solve_hsingle( void* solver_ptr, double* hsingle, double W, int ilead, int* state_order ){
+        self.lib.solve_hsingle.argtypes = [c_void_p, c_double_p, c_double, c_int, c_int_p]
+        self.lib.solve_hsingle.restype  = c_double
         
         self.lib.get_kernel.argtypes = [c_void_p, c_double_p]
         self.lib.get_kernel.restype  = None
@@ -222,6 +225,15 @@ class PauliSolver:
             solver: Handle to C++ solver instance
         """
         self.lib.solve_pauli(solver)
+
+    # double solve_hsingle( void* solver_ptr, double* hsingle, double W, int ilead, int* state_order ){
+    def solve_hsingle(self, solver, hsingle, W, ilead, state_order):
+        """Solve the master equation
+        
+        Args:
+            solver: Handle to C++ solver instance
+        """
+        return self.lib.solve_hsingle(solver, _np_as(hsingle, c_double_p), W, ilead, _np_as(state_order, c_int_p))
     
     def get_energies(self, solver, nstates):
         """Get the kernel matrix"""

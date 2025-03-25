@@ -64,7 +64,7 @@ coeffE = 0.4
 coeffT = 0.3
 
 
-verbosity = 3
+verbosity = 2
 
 # ==== Functions
 
@@ -194,6 +194,11 @@ def run_cpp_solver(TLeads):
         
         print(" 7. Solve the system")
         pauli.solve(solver)
+        
+
+        #I1 = pauli.solve_hsingle(solver, Hsingle_, W, 0, state_order)
+        #print( f"Current I1: {I1:.16g}" )
+
         
         print(" 8. Calculate properties")
         energies             = pauli.get_energies(solver, NStates)
@@ -348,4 +353,4 @@ if __name__ == "__main__":
     
     qmeq_res = run_QmeQ_solver(Hsingle, Hcoulomb, mu_L, Temp_L, TLeads)
     cpp_res  = run_cpp_solver(TLeads)
-    #compare_results(qmeq_res, cpp_res)
+    compare_results(qmeq_res, cpp_res)

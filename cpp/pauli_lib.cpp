@@ -75,6 +75,23 @@ void solve_pauli(void* solver_ptr) {
     }
 }
 
+double solve_hsingle( void* solver_ptr, double* hsingle, double W, int ilead, int* state_order ){
+    printf("solve_hsingle() ilead: %d W: %g\n", ilead, W);
+    PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
+    if (solver) {
+        solver->W = W;
+        solver->setHsingle(hsingle);
+        solver->init_states_by_charge();
+        if(state_order) { solver->setStateOrder(state_order); }
+        solver->generate_fct();
+        solver->generate_kern();
+        if(ilead >= 0) {
+            return solver->generate_current(ilead);
+        }
+    }
+    return 0.0;
+}
+
 // Calculate current through a lead (step 8 in optimization scheme)
 double calculate_current(void* solver_ptr, int lead_idx) {
     PauliSolver* solver = static_cast<PauliSolver*>(solver_ptr);
